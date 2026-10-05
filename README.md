@@ -19,6 +19,7 @@ Arayüz `http://localhost:3000` adresindedir. `.env.example` dosyasını `.env.l
 - **Test ayarları** bölümüne maç UUID'si, lig UUID'si ve maç durumu girilebilir. Bağlam değişirse mevcut mesajların anlamını korumak için yeni sohbet açılır.
 - **Kart modu** `use_predefined: true` gönderir. Kartın yanındaki **Bu karttan sohbete devam et** eylemi, endpoint'in mevcut `question_id` alanıyla devam eder.
 - Yanıt `assistant_delta` olaylarıyla parça parça gösterilir. Son `message` olayı taslağı kesin yanıtla değiştirir. Hata ve durdurma durumu ekranda gösterilir.
+- Akış ve kesin yanıt aynı Markdown gösterimini kullanır; paragraflar, listeler ve tablolar biçimlendirilir. Geniş tablolar yatay kaydırılabilir. Satır sonları korunur.
 - Sohbet listesi bu tarayıcının yerel depolamasında saklanır. Agent'ın sunucudaki konuşma belleği farklı bir süre sonunda sona erebilir.
 
 Tarayıcı, `/api/ask_stream_mai` yolundaki Next.js vekiline istek yapar. Vekil aynı istek gövdesini `MAI_API_BASE_URL/ask_stream_mai` adresine iletir ve cevap akışını tamponlamadan tarayıcıya aktarır. Böylece API'de CORS değişikliği gerekmez.

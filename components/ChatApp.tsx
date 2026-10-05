@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readMaiStream } from "@/lib/stream";
+import MessageMarkdown from "@/components/MessageMarkdown";
 import type { ChatContext, ChatMessage, Conversation, MaiStreamEvent, MatchStatus } from "@/lib/types";
 
 const STORAGE_KEY = "mai-stream-ui:conversations:v1";
@@ -352,7 +353,8 @@ export default function ChatApp() {
               <div className="message-content">
                 {message.role === "assistant" && <div className="assistant-label">mAI {message.predefined && <span className="card-badge">Hazır kart</span>}</div>}
                 <div className={`message-text ${message.error ? "message-error" : ""}`}>
-                  {message.text || (message.role === "assistant" ? <span className="typing-dots"><i /><i /><i /></span> : "")}
+                  {message.text ? (message.role === "assistant" ? <MessageMarkdown text={message.text} /> : message.text)
+                    : (message.role === "assistant" ? <span className="typing-dots"><i /><i /><i /></span> : "")}
                   {message.status === "Yanıt yazılıyor…" && <span className="stream-cursor" />}
                 </div>
                 {message.role === "assistant" && message.status && <div className="message-status"><span className="status-pulse" />{message.status}</div>}
