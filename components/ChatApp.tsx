@@ -8,7 +8,8 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readMaiStream } from "@/lib/stream";
 import MessageMarkdown from "@/components/MessageMarkdown";
-import type { ChatContext, ChatMessage, Conversation, MaiStreamEvent, MatchStatus } from "@/lib/types";
+import SportIcon from "@/components/SportIcon";
+import type { ChatContext, ChatMessage, Conversation, MaiStreamEvent, MatchStatus, Sport } from "@/lib/types";
 
 const STORAGE_KEY = "mai-stream-ui:conversations:v1";
 const SELECTED_KEY = "mai-stream-ui:selected:v1";
@@ -17,10 +18,27 @@ const CONTEXT_KEY = "mai-stream-ui:context:v1";
 const TOKEN_KEY = "mai-stream-ui:token:v1";
 const EMPTY_CONTEXT: ChatContext = { matchId: "", competitionId: "", matchStatus: "Fixture" };
 
-function makeConversation(context: ChatContext): Conversation {
+// Futbol varsayılandır. Basketbol sekmesi ayrı endpoint'e gider, sohbet listesi ayrıdır ve turuncu temayla açılır.
+const SPORTS: Record<Sport, { label: string; description: string; endpoint: string }> = {
+  football: { label: "Futbol", description: "Maç analizi ve lig istatistikleri", endpoint: "/api/ask_stream_mai" },
+  basketball: { label: "Basketbol", description: "EuroLeague istatistikleri ve fantasy", endpoint: "/api/ask_stream_mai_basketball" },
+};
+const BASKETBALL_SUGGESTIONS = [
+  "En çok pota altından sayı bulan takımlar kimler?",
+  "Hangi takımlara karşı guardlar en çok sayı üretiyor?",
+  "En çok üçlük yiyen takımlar hangileri?",
+  "Zalgiris deplasmandaki maçlarında ortalama kaç sayı yiyor?",
+  "Bu tur kaptan olarak kimi seçmeliyim?",
+];
+
+function sportOf(chat: Conversation): Sport {
+  return chat.sport || "football";
+}
+
+function makeConversation(context: ChatContext, sport: Sport = "football"): Conversation {
   const timestamp = Date.now();
   return {
-    id: crypto.randomUUID(), sessionId: timestamp * 100 + Math.floor(Math.random() * 100),
+    id: crypto.randomUUID(), sport, sessionId: timestamp * 100 + Math.floor(Math.random() * 100),
     title: "Yeni sohbet", createdAt: timestamp, updatedAt: timestamp,
     context: { ...context }, messages: [],
   };
@@ -35,7 +53,8 @@ function groupFor(timestamp: number) {
   return "Daha önce";
 }
 
-function contextLabel(context: ChatContext) {
+function contextLabel(context: ChatContext, sport: Sport = "football") {
+  if (sport === "basketball") return "EuroLeague 2026/27";
   if (!context.matchId && !context.competitionId) return "Genel futbol";
   if (context.matchId) return `Maç · ${context.matchId.slice(0, 10)}…`;
   return `Lig · ${context.competitionId.slice(0, 10)}…`;
@@ -56,6 +75,9 @@ function getErrorMessage(text: string): string {
 
 export default function ChatApp() {
   const [ready, setReady] = useState(false);
+  const [sport, setSport] = useState<Sport>("football");
+  const [sportMenuOpen, setSportMenuOpen] = useState<"sidebar" | "topbar" | "mobile" | null>(null);
+  const lastSelectedRef = useRef<Record<Sport, string | null>>({ football: null, basketball: null });
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [defaultContext, setDefaultContext] = useState<ChatContext>(EMPTY_CONTEXT);
@@ -81,8 +103,13 @@ export default function ChatApp() {
   useEffect(() => {
     try {
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]") as Conversation[];
-      if (Array.isArray(stored)) setConversations(stored.filter((chat) => chat?.id && Array.isArray(chat.messages)));
-      setSelectedId(localStorage.getItem(SELECTED_KEY));
+      const chats = Array.isArray(stored) ? stored.filter((chat) => chat?.id && Array.isArray(chat.messages)) : [];
+      setConversations(chats);
+      // Arayüz her açılışta futbolla başlar; son seçili sohbet basketbolsa o sekmeye geçildiğinde açılır.
+      const storedSelected = localStorage.getItem(SELECTED_KEY);
+      const storedChat = chats.find((chat) => chat.id === storedSelected);
+      if (storedChat && sportOf(storedChat) === "basketball") lastSelectedRef.current.basketball = storedChat.id;
+      else setSelectedId(storedSelected);
       const savedContext = JSON.parse(localStorage.getItem(CONTEXT_KEY) || "null") as ChatContext | null;
       if (savedContext && typeof savedContext.matchId === "string") setDefaultContext(savedContext);
       const userId = localStorage.getItem(USER_KEY) || `mai-ui-${crypto.randomUUID()}`;
@@ -108,11 +135,13 @@ export default function ChatApp() {
     }
   }, [ready, conversations, selectedId, defaultContext, accessToken]);
 
-  const selected = conversations.find((chat) => chat.id === selectedId) || null;
+  const selected = conversations.find((chat) => chat.id === selectedId && sportOf(chat) === sport) || null;
   const activeContext = selected?.context || defaultContext;
-  const sortedChats = useMemo(() => [...conversations]
+  const isBasketball = sport === "basketball";
+  const sortedChats = useMemo(() => conversations
+    .filter((chat) => sportOf(chat) === sport)
     .filter((chat) => chat.title.toLocaleLowerCase("tr").includes(search.toLocaleLowerCase("tr")))
-    .sort((a, b) => b.updatedAt - a.updatedAt), [conversations, search]);
+    .sort((a, b) => b.updatedAt - a.updatedAt), [conversations, search, sport]);
   const groupedChats = useMemo(() => {
     const groups = new Map<string, Conversation[]>();
     for (const chat of sortedChats) {
@@ -133,9 +162,26 @@ export default function ChatApp() {
       : chat));
   }, []);
 
+  function switchSport(next: Sport) {
+    setSportMenuOpen(null);
+    if (next === sport) return;
+    if (sending) abortRef.current?.abort();
+    lastSelectedRef.current[sport] = selected?.id || null;
+    const previous = lastSelectedRef.current[next];
+    setSport(next);
+    setSelectedId(previous && conversations.some((chat) => chat.id === previous) ? previous : null);
+    setDraft("");
+    setSearch("");
+    setPredefinedMode(false);
+    setPendingContinuationId(null);
+    setNotice("");
+    setMobileSidebarOpen(false);
+    stickToBottomRef.current = true;
+  }
+
   function newChat(context = defaultContext) {
     if (sending) abortRef.current?.abort();
-    const chat = makeConversation(context);
+    const chat = makeConversation(context, sport);
     setConversations((previous) => [chat, ...previous]);
     setSelectedId(chat.id);
     setDraft("");
@@ -181,7 +227,7 @@ export default function ChatApp() {
     if (!message.questionId) return;
     const index = chat.messages.findIndex((item) => item.id === message.id);
     const priorUser = [...chat.messages.slice(0, index)].reverse().find((item) => item.role === "user");
-    const next = makeConversation(chat.context);
+    const next = makeConversation(chat.context, sportOf(chat));
     next.title = `Devam · ${chat.title}`;
     next.messages = [...(priorUser ? [{ ...priorUser, id: crypto.randomUUID() }] : []),
       { ...message, id: crypto.randomUUID() }];
@@ -210,11 +256,12 @@ export default function ChatApp() {
   async function sendMessage() {
     const question = draft.trim();
     if (!question || sending || !ready) return;
-    const chat = selected || makeConversation(defaultContext);
+    const chat = selected || makeConversation(defaultContext, sport);
+    const chatSport = sportOf(chat);
     const chatId = chat.id;
     const userMessage: ChatMessage = { id: crypto.randomUUID(), role: "user", text: question, createdAt: Date.now() };
     const assistantId = crypto.randomUUID();
-    const pending: ChatMessage = { id: assistantId, role: "assistant", text: "", status: "Düşünüyor…", createdAt: Date.now(), predefined: predefinedMode };
+    const pending: ChatMessage = { id: assistantId, role: "assistant", text: "", status: "Düşünüyor…", createdAt: Date.now(), predefined: chatSport === "football" && predefinedMode };
     setConversations((previous) => {
       const current = selected ? previous : [chat, ...previous];
       return current.map((item) => item.id === chatId ? {
@@ -231,18 +278,20 @@ export default function ChatApp() {
     abortRef.current = controller;
     let receivedFinal = false;
 
-    const request: Record<string, unknown> = {
-      question, user_id: userIdRef.current, session_id: chat.sessionId,
-      match_status: chat.context.matchStatus, use_predefined: predefinedMode,
-    };
-    if (chat.context.matchId) request.match_id = chat.context.matchId;
-    if (chat.context.competitionId) request.competitions = [chat.context.competitionId];
-    if (pendingContinuationId) request.question_id = pendingContinuationId;
+    // Basketbolda maç bağlamı, hazır kart ve kart devamı yok: yalnızca soru ve oturum gönderilir.
+    const request: Record<string, unknown> = { question, user_id: userIdRef.current, session_id: chat.sessionId };
+    if (chatSport === "football") {
+      request.match_status = chat.context.matchStatus;
+      request.use_predefined = predefinedMode;
+      if (chat.context.matchId) request.match_id = chat.context.matchId;
+      if (chat.context.competitionId) request.competitions = [chat.context.competitionId];
+      if (pendingContinuationId) request.question_id = pendingContinuationId;
+    }
     setPredefinedMode(false);
     setPendingContinuationId(null);
 
     try {
-      const response = await fetch("/api/ask_stream_mai", {
+      const response = await fetch(SPORTS[chatSport].endpoint, {
         method: "POST", headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { "x-mai-ui-token": accessToken } : {}),
@@ -291,8 +340,29 @@ export default function ChatApp() {
 
   const oldHistory = selected && selected.messages.length > 0 && Date.now() - selected.updatedAt > 10 * 60_000;
 
+  function suggest(question: string) {
+    setDraft(question);
+    textareaRef.current?.focus();
+  }
+
+  const brandSwitch = (place: "sidebar" | "topbar" | "mobile") => <div className={`brand-switch ${place === "sidebar" ? "" : "compact"}`}>
+    <button className="brand-name" title="Spor seç" aria-haspopup="menu" aria-expanded={sportMenuOpen === place} onClick={() => setSportMenuOpen((open) => open === place ? null : place)}>
+      mAI <span className="brand-sport"><SportIcon sport={sport} size={13} />{SPORTS[sport].label}</span><ChevronDown size={14} strokeWidth={2} />
+    </button>
+    {sportMenuOpen === place && <>
+      <button className="menu-scrim" aria-label="Spor menüsünü kapat" tabIndex={-1} onClick={() => setSportMenuOpen(null)} />
+      <div className="sport-menu" role="menu" aria-label="Spor" onKeyDown={(event) => { if (event.key === "Escape") setSportMenuOpen(null); }}>
+        {(Object.keys(SPORTS) as Sport[]).map((key) => <button key={key} role="menuitemradio" aria-checked={key === sport} aria-label={`${SPORTS[key].label}: ${SPORTS[key].description}`} autoFocus={key === sport} className={`sport-option ${key}`} onClick={() => switchSport(key)}>
+          <span className="sport-option-icon"><SportIcon sport={key} size={17} /></span>
+          <span className="sport-option-text"><strong>{SPORTS[key].label}</strong><small>{SPORTS[key].description}</small></span>
+          {key === sport && <Check size={15} />}
+        </button>)}
+      </div>
+    </>}
+  </div>;
+
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-sport={sport}>
       <nav className="icon-rail" aria-label="Ana gezinme">
         <div className="rail-top">
           <button className="rail-button selected" title="Sohbetler" aria-label="Sohbetler" onClick={() => setSidebarOpen(true)}><Home size={19} /></button>
@@ -305,7 +375,7 @@ export default function ChatApp() {
       {mobileSidebarOpen && <button className="mobile-scrim" aria-label="Menüyü kapat" onClick={() => setMobileSidebarOpen(false)} />}
       <aside className={`sidebar ${sidebarOpen ? "" : "collapsed"} ${mobileSidebarOpen ? "mobile-open" : ""}`}>
         <div className="sidebar-header">
-          <div className="brand-name">mAI <ChevronDown size={14} strokeWidth={2} /></div>
+          {brandSwitch("sidebar")}
           <div className="sidebar-header-actions">
             <button className="icon-button" title="Sohbet ara" aria-label="Sohbet ara" onClick={() => setSearchOpen((value) => !value)}><Search size={17} /></button>
             <button className="icon-button desktop-only" title="Yan paneli kapat" aria-label="Yan paneli kapat" onClick={() => setSidebarOpen(false)}><PanelLeftClose size={17} /></button>
@@ -335,12 +405,14 @@ export default function ChatApp() {
       <main className="main-pane">
         <header className="topbar">
           <div className="topbar-left">
-            {!sidebarOpen && <button className="icon-button" title="Yan paneli aç" aria-label="Yan paneli aç" onClick={() => setSidebarOpen(true)}><PanelLeftOpen size={18} /></button>}
+            {!sidebarOpen && <button className="icon-button desktop-only" title="Yan paneli aç" aria-label="Yan paneli aç" onClick={() => setSidebarOpen(true)}><PanelLeftOpen size={18} /></button>}
+            {!sidebarOpen && <div className="desktop-only">{brandSwitch("topbar")}</div>}
             <button className="icon-button mobile-menu" aria-label="Menüyü aç" onClick={() => setMobileSidebarOpen(true)}><Menu size={21} /></button>
-            <div className="conversation-title">{selected?.title || "mAI"}</div>
+            <div className="mobile-brand">{brandSwitch("mobile")}</div>
+            <div className="conversation-title">{selected?.title || (isBasketball ? "mAI Basketbol" : "mAI")}</div>
           </div>
           <div className="topbar-right">
-            <span className="topbar-context">{contextLabel(activeContext)}</span>
+            <span className="topbar-context">{contextLabel(activeContext, sport)}</span>
             <button className="icon-button share-button" onClick={() => void shareChat()} title="Sohbeti kopyala" aria-label="Sohbeti kopyala" disabled={!selected?.messages.length}>{copiedId === "share" ? <Check size={17} /> : <Copy size={17} />}</button>
             <button className="icon-button" onClick={openSettings} title="Test ayarları" aria-label="Test ayarları"><Settings2 size={18} /></button>
           </div>
@@ -367,15 +439,23 @@ export default function ChatApp() {
               </div>
             </div>)}
             {oldHistory && <p className="history-expiry">Bu cihazdaki mesajlar saklanır; agent’ın sohbet bağlamı bir süre sonra sıfırlanabilir.</p>}
+          </div> : isBasketball ? <div className="empty-state">
+            <div className="welcome-mark"><span>m</span><i /></div>
+            <span className="sport-eyebrow"><SportIcon sport="basketball" size={13} /> EuroLeague 2026/27</span>
+            <h1>Fantasy kadronu birlikte kuralım</h1>
+            <p>Takım savunmaları, oyuncu formu ve maç istatistiklerini mAI’ye sor.</p>
+            <div className="suggestions">
+              {BASKETBALL_SUGGESTIONS.map((question) => <button key={question} onClick={() => suggest(question)}>{question}</button>)}
+            </div>
           </div> : <div className="empty-state">
             <div className="welcome-mark"><span>m</span><i /></div>
             <h1>Bugün futbol hakkında ne konuşalım?</h1>
             <p>Maç analizi, oyuncu performansı ve lig istatistiklerini mAI’ye sor.</p>
             <div className="suggestions">
-              {activeContext.matchId && <button onClick={() => { setDraft("Bu maçta en çok xG üreten oyuncu kim?"); textareaRef.current?.focus(); }}>Bu maçta en çok xG üreten kim?</button>}
-              <button onClick={() => { setDraft("Bu sezon en çok pas yapan oyuncu kim?"); textareaRef.current?.focus(); }}>En çok pas yapan oyuncu kim?</button>
-              {activeContext.matchId ? <button onClick={() => { setDraft("Bu maçın gidişatını analiz et."); textareaRef.current?.focus(); }}>Maçın gidişatını analiz et</button>
-                : <button onClick={() => { setDraft("Bu sezon gol krallığında kim önde?"); textareaRef.current?.focus(); }}>Gol krallığında kim önde?</button>}
+              {activeContext.matchId && <button onClick={() => suggest("Bu maçta en çok xG üreten oyuncu kim?")}>Bu maçta en çok xG üreten kim?</button>}
+              <button onClick={() => suggest("Bu sezon en çok pas yapan oyuncu kim?")}>En çok pas yapan oyuncu kim?</button>
+              {activeContext.matchId ? <button onClick={() => suggest("Bu maçın gidişatını analiz et.")}>Maçın gidişatını analiz et</button>
+                : <button onClick={() => suggest("Bu sezon gol krallığında kim önde?")}>Gol krallığında kim önde?</button>}
             </div>
           </div>}
         </div>
@@ -386,11 +466,13 @@ export default function ChatApp() {
           <div className="composer">
             <textarea ref={textareaRef} rows={1} value={draft} onChange={(event) => { setDraft(event.target.value); event.target.style.height = "auto"; event.target.style.height = `${Math.min(event.target.scrollHeight, 180)}px`; }} onKeyDown={handleComposerKeyDown} placeholder="mAI’ye sor" aria-label="mAI’ye sor" disabled={!ready} />
             <div className="composer-toolbar">
-              <div className="composer-left">
+              {isBasketball ? <div className="composer-left">
+                <span className="context-chip static"><span className="chip-dot" />{contextLabel(activeContext, sport)}</span>
+              </div> : <div className="composer-left">
                 <button className="composer-icon" title="Maç ve lig bağlamı" aria-label="Maç ve lig bağlamı" onClick={openSettings}><Plus size={19} /></button>
                 <button className="context-chip" onClick={openSettings}><span className="chip-dot" />{contextLabel(activeContext)}<ChevronDown size={13} /></button>
                 <button className={`mode-chip ${predefinedMode ? "on" : ""}`} title="Hazır kart isteği olarak gönder" onClick={() => setPredefinedMode((value) => !value)}><Sparkles size={14} /> Kart modu</button>
-              </div>
+              </div>}
               {sending ? <button className="send-button stop" title="Yanıtı durdur" aria-label="Yanıtı durdur" onClick={() => abortRef.current?.abort()}><span className="stop-square" /></button>
                 : <button className="send-button" title="Gönder" aria-label="Gönder" disabled={!draft.trim() || !ready} onClick={() => void sendMessage()}><ArrowUp size={19} strokeWidth={2.8} /></button>}
             </div>
@@ -401,19 +483,23 @@ export default function ChatApp() {
 
       {settingsOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSettingsOpen(false); }}>
         <section className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-          <div className="modal-heading"><div><span className="modal-eyebrow">TEST ORTAMI</span><h2 id="settings-title">Sohbet bağlamı</h2></div><button className="icon-button" aria-label="Kapat" onClick={() => setSettingsOpen(false)}><X size={18} /></button></div>
-          <p className="modal-description">Mobil uygulamadaki maç girişini burada belirleyin. Yeni sohbetler bu bağlamla açılır.</p>
-          <label className="field-label">Maç UUID <span>İsteğe bağlı</span><input value={settingsDraft.matchId} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, matchId: event.target.value }))} placeholder="Örn. cjmgsnh2mcm3fvksvmlyxu3h0" spellCheck={false} /></label>
-          <label className="field-label">Lig UUID <span>İsteğe bağlı</span><input value={settingsDraft.competitionId} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, competitionId: event.target.value }))} placeholder="Örn. 482ofyysbdbeoxauk19yg7tdt" spellCheck={false} /></label>
-          <label className="field-label">Maç durumu<select value={settingsDraft.matchStatus} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, matchStatus: event.target.value as MatchStatus }))}><option value="Fixture">Maç öncesi</option><option value="Playing">Canlı</option><option value="Played">Maç sonrası</option></select></label>
-          <button className="example-context" onClick={() => setSettingsDraft({ matchId: "cjmgsnh2mcm3fvksvmlyxu3h0", competitionId: "482ofyysbdbeoxauk19yg7tdt", matchStatus: "Played" })}><Sparkles size={15} /> Örnek maç: Fenerbahçe – Eyüpspor</button>
+          <div className="modal-heading"><div><span className="modal-eyebrow">TEST ORTAMI</span><h2 id="settings-title">{isBasketball ? "Basketbol ayarları" : "Sohbet bağlamı"}</h2></div><button className="icon-button" aria-label="Kapat" onClick={() => setSettingsOpen(false)}><X size={18} /></button></div>
+          {isBasketball ? <p className="modal-description">Basketbol sohbetleri EuroLeague 2026/27 verisini kullanır; maç bağlamı gerekmez. Spor seçimini sol üstteki mAI logosundan değiştirebilirsiniz.</p> : <>
+            <p className="modal-description">Mobil uygulamadaki maç girişini burada belirleyin. Yeni sohbetler bu bağlamla açılır.</p>
+            <label className="field-label">Maç UUID <span>İsteğe bağlı</span><input value={settingsDraft.matchId} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, matchId: event.target.value }))} placeholder="Örn. cjmgsnh2mcm3fvksvmlyxu3h0" spellCheck={false} /></label>
+            <label className="field-label">Lig UUID <span>İsteğe bağlı</span><input value={settingsDraft.competitionId} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, competitionId: event.target.value }))} placeholder="Örn. 482ofyysbdbeoxauk19yg7tdt" spellCheck={false} /></label>
+            <label className="field-label">Maç durumu<select value={settingsDraft.matchStatus} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, matchStatus: event.target.value as MatchStatus }))}><option value="Fixture">Maç öncesi</option><option value="Playing">Canlı</option><option value="Played">Maç sonrası</option></select></label>
+            <button className="example-context" onClick={() => setSettingsDraft({ matchId: "cjmgsnh2mcm3fvksvmlyxu3h0", competitionId: "482ofyysbdbeoxauk19yg7tdt", matchStatus: "Played" })}><Sparkles size={15} /> Örnek maç: Fenerbahçe – Eyüpspor</button>
+          </>}
           <div className="modal-divider" />
           <label className="field-label">Ekip erişim kodu <span>Sunucuda açıksa</span><input type="password" value={accessToken} onChange={(event) => setAccessToken(event.target.value)} placeholder="Erişim kodu" autoComplete="off" /></label>
           <div className="modal-info"><ShieldCheck size={16} /><span>Erişim kodu yalnızca bu tarayıcı oturumunda saklanır. Sohbet listesi bu cihazda tutulur.</span></div>
           <div className="modal-actions"><button className="cancel-button" onClick={() => setSettingsOpen(false)}>Vazgeç</button><button className="save-button" onClick={saveSettings}>Kaydet</button></div>
         </section>
       </div>}
-      <button className="help-button" title="Yardım" aria-label="Yardım" onClick={() => setNotice("Enter gönderir, Shift+Enter yeni satır ekler. Maç bağlamını ayarlardan değiştirebilirsiniz.")}><CircleHelp size={18} /></button>
+      <button className="help-button" title="Yardım" aria-label="Yardım" onClick={() => setNotice(isBasketball
+        ? "Enter gönderir, Shift+Enter yeni satır ekler. Futbola dönmek için sol üstteki mAI logosuna tıklayın."
+        : "Enter gönderir, Shift+Enter yeni satır ekler. Maç bağlamını ayarlardan, basketbolu sol üstteki mAI logosundan seçebilirsiniz.")}><CircleHelp size={18} /></button>
     </div>
   );
 }

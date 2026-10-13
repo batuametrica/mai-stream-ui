@@ -22,7 +22,19 @@ Arayüz `http://localhost:3000` adresindedir. `.env.example` dosyasını `.env.l
 - Akış ve kesin yanıt aynı Markdown gösterimini kullanır; paragraflar, listeler ve tablolar biçimlendirilir. Geniş tablolar yatay kaydırılabilir. Satır sonları korunur.
 - Sohbet listesi bu tarayıcının yerel depolamasında saklanır. Agent'ın sunucudaki konuşma belleği farklı bir süre sonunda sona erebilir.
 
-Tarayıcı, `/api/ask_stream_mai` yolundaki Next.js vekiline istek yapar. Vekil aynı istek gövdesini `MAI_API_BASE_URL/ask_stream_mai` adresine iletir ve cevap akışını tamponlamadan tarayıcıya aktarır. Böylece API'de CORS değişikliği gerekmez.
+### Futbol / Basketbol
+
+- Sayfa her açılışta **Futbol** ile başlar. Sol üstteki **mAI** logosuna tıklanınca Futbol/Basketbol menüsü açılır.
+- Yan panel kapalıyken ve telefonda aynı seçici üst çubukta da görünür.
+- **Basketbol** sekmesi EuroLeague 2026/27 istatistikleri ve fantasy soruları içindir:
+  - turuncu vurgu kullanır;
+  - kendi sohbet listesini tutar (`Conversation.sport`);
+  - boş ekranda fantasy önerileri gösterir;
+  - maç bağlamı, kart modu ve maç ayarları bu sekmede gizlidir.
+
+### API vekilleri
+
+Tarayıcı, `/api/ask_stream_mai` yolundaki Next.js vekiline istek yapar. Vekil aynı istek gövdesini `MAI_API_BASE_URL/ask_stream_mai` adresine iletir ve cevap akışını tamponlamadan tarayıcıya aktarır. Böylece API'de CORS değişikliği gerekmez. Basketbol sekmesi aynı şekilde `/api/ask_stream_mai_basketball` vekilini kullanır; istek `MAI_API_BASE_URL/ask_stream_mai_basketball` adresine gider. İki vekilin ortak kodu `lib/proxy.ts` dosyasındadır; erişim kodu kontrolü de buradadır.
 
 ## Dağıtım için gereken ayarlar
 

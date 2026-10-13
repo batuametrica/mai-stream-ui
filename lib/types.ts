@@ -1,5 +1,7 @@
 export type MatchStatus = "Fixture" | "Playing" | "Played";
 
+export type Sport = "football" | "basketball";
+
 export type ChatContext = {
   matchId: string;
   competitionId: string;
@@ -21,6 +23,7 @@ export type ChatMessage = {
 
 export type Conversation = {
   id: string;
+  sport?: Sport; // eski kayıtlarda yok: futbol
   sessionId: number;
   title: string;
   createdAt: number;
