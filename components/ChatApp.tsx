@@ -28,7 +28,7 @@ const BASKETBALL_SUGGESTIONS = [
   "Hangi takımlara karşı guardlar en çok sayı üretiyor?",
   "En çok üçlük yiyen takımlar hangileri?",
   "Zalgiris deplasmandaki maçlarında ortalama kaç sayı yiyor?",
-  "Bu tur kaptan olarak kimi seçmeliyim?",
+  "Bu hafta en yüksek PIR kimin olur?",
 ];
 
 function sportOf(chat: Conversation): Sport {
@@ -442,7 +442,7 @@ export default function ChatApp() {
           </div> : isBasketball ? <div className="empty-state">
             <div className="welcome-mark"><span>m</span><i /></div>
             <span className="sport-eyebrow"><SportIcon sport="basketball" size={13} /> EuroLeague 2026/27</span>
-            <h1>Fantasy kadronu birlikte kuralım</h1>
+            <h1>Euroleague 2026/2027 sezonu istatistik asistanı</h1>
             <p>Takım savunmaları, oyuncu formu ve maç istatistiklerini mAI’ye sor.</p>
             <div className="suggestions">
               {BASKETBALL_SUGGESTIONS.map((question) => <button key={question} onClick={() => suggest(question)}>{question}</button>)}
