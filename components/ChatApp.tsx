@@ -3,10 +3,11 @@
 import {
   ArrowUp, Check, ChevronDown, CircleHelp, Copy, History, Home, Menu,
   MessageSquare, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil,
-  Plus, Search, Settings2, ShieldCheck, Sparkles, SquarePen, Trash2, X,
+  Plus, Search, Settings2, ShieldCheck, Smartphone, Sparkles, SquarePen, Trash2, X,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { readMaiStream } from "@/lib/stream";
+import { getErrorMessage, readMaiStream } from "@/lib/stream";
 import MessageMarkdown from "@/components/MessageMarkdown";
 import SportIcon from "@/components/SportIcon";
 import type { ChatContext, ChatMessage, Conversation, MaiStreamEvent, MatchStatus, Sport } from "@/lib/types";
@@ -65,15 +66,6 @@ function contextLabel(context: ChatContext, sport: Sport = "football") {
 
 function buttonTitle(message: string) {
   return message.length > 48 ? `${message.slice(0, 48)}…` : message;
-}
-
-function getErrorMessage(text: string): string {
-  try {
-    const parsed = JSON.parse(text) as { error?: string; detail?: string };
-    return parsed.error || parsed.detail || text;
-  } catch {
-    return text || "İstek tamamlanamadı.";
-  }
 }
 
 export default function ChatApp() {
@@ -374,6 +366,7 @@ export default function ChatApp() {
           <button className="rail-button selected" title="Sohbetler" aria-label="Sohbetler" onClick={() => setSidebarOpen(true)}><Home size={19} /></button>
           <button className="rail-button" title="Yeni sohbet" aria-label="Yeni sohbet" onClick={() => newChat()}><SquarePen size={19} /></button>
           <button className="rail-button" title="Geçmiş" aria-label="Geçmiş" onClick={() => { setSidebarOpen(true); setSearchOpen(true); }}><History size={19} /></button>
+          <Link className="rail-button" href="/mobil" title="Mobil maç ekranı" aria-label="Mobil maç ekranı"><Smartphone size={19} /></Link>
         </div>
         <div className="rail-bottom"><button className="rail-button" title="Ayarlar" aria-label="Ayarlar" onClick={openSettings}><Settings2 size={19} /></button></div>
       </nav>
@@ -389,6 +382,7 @@ export default function ChatApp() {
           </div>
         </div>
         <button className="new-chat-button" onClick={() => newChat()}><SquarePen size={16} /> Yeni sohbet</button>
+        <Link className="new-chat-button sidebar-link" href="/mobil"><Smartphone size={16} /> Mobil maç ekranı</Link>
         {searchOpen && <div className="sidebar-search"><Search size={15} /><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Sohbetlerde ara" aria-label="Sohbetlerde ara" /></div>}
         <div className="history-scroll">
           {groupedChats.size === 0 && <p className="history-empty">{search ? "Eşleşen sohbet yok." : "Sohbetlerin burada görünecek."}</p>}

@@ -32,6 +32,15 @@ Arayüz `http://localhost:3000` adresindedir. `.env.example` dosyasını `.env.l
   - boş ekranda fantasy önerileri gösterir;
   - maç bağlamı, kart modu ve maç ayarları bu sekmede gizlidir.
 
+### Mobil maç ekranı (`/mobil`)
+
+mAI'nin mobil uygulamadaki maç deneyimini test etmek için ayrı ekran. Sohbet ekranında sol raydaki telefon simgesi ve yan paneldeki **Mobil maç ekranı** bağlantısı buraya açılır. Masaüstünde telefon çerçevesi içinde, telefonda tam ekran görünür.
+
+- **Maç listesi:** bugün dahil 3 günün (İstanbul saati) maçları gün sekmeleriyle listelenir. Maçlar `/api/matches` ucundan gelir; bu uç mAI'nin kapsadığı ligleri (`lib/leagues.ts`, `etl/mai_consensus/config.py` LEAGUE_MAPPING ile aynı) Maçkolik `competition-service`'ten çeker ve 2 dakika önbellekte tutar. Yeni lig/sezon eklenince `lib/leagues.ts` de güncellenmelidir.
+- **Maç ekranı:** maça girince hazır sorular `/api/predefined_questions` vekiliyle `predefined_questions_stream` ucundan maç durumuna göre (maç öncesi, canlı, maç sonu) gelir.
+- **Cevap kartı:** soruya dokununca alttan kart açılır. İstek, mobil uygulamadaki gibi `/ask_stream`'e `use_predefined: true`, maç kimliği, maç durumu ve maçın ligiyle gider. Kartta cevap süresi, kopyalama ve **Tekrar sor** bulunur. Cevaplanan sorular listede işaretlenir.
+- Geri tuşu önce kartı, sonra maç ekranını kapatır. Maç adresi `?mac=<uuid>` ile paylaşılabilir.
+
 ### API vekilleri
 
 Futbol sekmesinde tarayıcı, `/api/ask_stream` yolundaki Next.js vekiline istek yapar. Vekil aynı istek gövdesini `MAI_API_BASE_URL/ask_stream` adresine iletir ve cevap akışını tamponlamadan tarayıcıya aktarır. Böylece API'de CORS değişikliği gerekmez. Basketbol sekmesi aynı şekilde `/api/ask_stream_mai_basketball` vekilini kullanır; istek `MAI_API_BASE_URL/ask_stream_mai_basketball` adresine gider. Zengin akışlı (`assistant_delta`, çok satırlı metin) `/api/ask_stream_mai` vekili de durur; futbol sekmesini ona döndürmek için `components/ChatApp.tsx` içindeki `SPORTS.football.endpoint` değiştirilir. Vekillerin ortak kodu `lib/proxy.ts` dosyasındadır; erişim kodu kontrolü de buradadır.

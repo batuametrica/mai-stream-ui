@@ -121,6 +121,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .rail-top, .rail-bottom { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
 .rail-button { border: 0; color: #929292; background: transparent; width: 31px; height: 32px; border-radius: 9px; display: grid; place-items: center; padding: 0; }
 .rail-button:hover, .rail-button.selected { color: #eee; background: #363636; }
+a.rail-button, a.new-chat-button { text-decoration: none; }
+.new-chat-button.sidebar-link { margin-top: -12px; color: #cfcfcf; font-weight: 500; }
 .sidebar { width: 300px; flex: 0 0 300px; background: var(--sidebar); border-right: 1px solid #313131; display: flex; flex-direction: column; min-width: 0; transition: width .2s ease, flex-basis .2s ease; z-index: 3; }
 .sidebar.collapsed { width: 0; flex-basis: 0; overflow: hidden; border: 0; }
 .sidebar-header { height: 81px; flex: 0 0 81px; display: flex; align-items: flex-start; justify-content: space-between; padding: 18px 14px 0 16px; }

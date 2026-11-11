@@ -36,6 +36,29 @@ export type Conversation = {
   messages: ChatMessage[];
 };
 
+// Mobil ekran: Maçkolik competition-service'ten gelen maçın sade hali (/api/matches).
+export type MobileMatch = {
+  id: string;
+  competitionId: string;
+  competition: string;
+  country: string;
+  order: number;            // LEAGUES sırası
+  stage: string;            // "5. Hafta · Lig A"
+  kickoff: string;          // ISO, UTC
+  status: string;           // Maçkolik ham durumu: Fixture | Playing | Played | Postponed | Suspended | Cancelled
+  home: string;
+  away: string;
+  homeScore: number | null;
+  awayScore: number | null;
+};
+
+export type MatchesResponse = {
+  days: string[];           // İstanbul takvim günleri, YYYY-MM-DD
+  matches: MobileMatch[];
+  failed: string[];         // alınamayan liglerin adları
+  updatedAt: string;
+};
+
 export type MaiStreamEvent = {
   type: string;
   data?: {

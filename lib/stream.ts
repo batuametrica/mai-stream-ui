@@ -36,3 +36,15 @@ export async function readMaiStream(response: Response, onEvent: (event: MaiStre
     reader.releaseLock();
   }
 }
+
+// Vekil ({ error }) ve FastAPI ({ detail }) hata gövdelerini okunur metne çevirir.
+export function getErrorMessage(text: string): string {
+  try {
+    const parsed = JSON.parse(text) as { error?: string; detail?: unknown };
+    if (parsed.error) return parsed.error;
+    if (typeof parsed.detail === "string") return parsed.detail;
+    return text || "İstek tamamlanamadı.";
+  } catch {
+    return text || "İstek tamamlanamadı.";
+  }
+}
