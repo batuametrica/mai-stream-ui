@@ -1,5 +1,5 @@
 // Same-origin streaming proxy: the browser never needs direct access to the MAI API.
-export async function proxyMaiStream(request: Request, path: "/ask_stream_mai" | "/ask_stream_mai_basketball") {
+export async function proxyMaiStream(request: Request, path: "/ask_stream" | "/ask_stream_mai" | "/ask_stream_mai_basketball") {
   const requiredToken = process.env.MAI_UI_ACCESS_TOKEN;
   if (requiredToken && request.headers.get("x-mai-ui-token") !== requiredToken) {
     return Response.json({ error: "Erişim kodu hatalı." }, { status: 401 });

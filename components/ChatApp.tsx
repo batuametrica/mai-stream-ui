@@ -18,9 +18,11 @@ const CONTEXT_KEY = "mai-stream-ui:context:v1";
 const TOKEN_KEY = "mai-stream-ui:token:v1";
 const EMPTY_CONTEXT: ChatContext = { matchId: "", competitionId: "", matchStatus: "Fixture" };
 
-// Futbol varsayılandır. Basketbol sekmesi ayrı endpoint'e gider, sohbet listesi ayrıdır ve turuncu temayla açılır.
+// Futbol varsayılandır ve mobil uygulamaların kullandığı /ask_stream'e gider: cevap kelime kelime akmaz
+// (assistant_delta yok), final message tek satır düz metindir. Basketbol sekmesi ayrı endpoint'e gider, sohbet
+// listesi ayrıdır ve turuncu temayla açılır.
 const SPORTS: Record<Sport, { label: string; description: string; endpoint: string }> = {
-  football: { label: "Futbol", description: "Maç analizi ve lig istatistikleri", endpoint: "/api/ask_stream_mai" },
+  football: { label: "Futbol", description: "Maç analizi ve lig istatistikleri", endpoint: "/api/ask_stream" },
   basketball: { label: "Basketbol", description: "EuroLeague istatistikleri ve fantasy", endpoint: "/api/ask_stream_mai_basketball" },
 };
 const BASKETBALL_SUGGESTIONS = [
@@ -311,7 +313,7 @@ export default function ChatApp() {
         } else if (event.type === "error") {
           receivedFinal = true;
           updateMessage(chatId, assistantId, (message) => ({ ...message, text: text || "İstek tamamlanamadı.", status: undefined, error: true }));
-        } else if (["thinking", "phase", "tool_call", "tool_result"].includes(event.type) && text) {
+        } else if (["thinking", "agent_update", "phase", "tool_call", "tool_result"].includes(event.type) && text) {
           updateMessage(chatId, assistantId, (message) => ({ ...message, status: text }));
         }
       });

@@ -1,6 +1,6 @@
 # mAI Stream UI
 
-`ask_stream_mai` endpoint'ini ekip içinde denemek için hazırlanmış sohbet arayüzü. Koyu temalı masaüstü düzeninde solda sohbet geçmişi, sağda sohbet ve altta mesaj alanı bulunur. Telefon ekranlarında geçmiş açılır menüye dönüşür.
+Mobil uygulamaların kullandığı `ask_stream` endpoint'ini ekip içinde denemek için hazırlanmış sohbet arayüzü. `ask_stream` yeni futbol agent'ını eski mobil sözleşmesiyle döndürür: cevap kelime kelime akmaz, final mesaj tek satır düz metindir. Koyu temalı masaüstü düzeninde solda sohbet geçmişi, sağda sohbet ve altta mesaj alanı bulunur. Telefon ekranlarında geçmiş açılır menüye dönüşür.
 
 ## Yerelde çalıştırma
 
@@ -34,7 +34,7 @@ Arayüz `http://localhost:3000` adresindedir. `.env.example` dosyasını `.env.l
 
 ### API vekilleri
 
-Tarayıcı, `/api/ask_stream_mai` yolundaki Next.js vekiline istek yapar. Vekil aynı istek gövdesini `MAI_API_BASE_URL/ask_stream_mai` adresine iletir ve cevap akışını tamponlamadan tarayıcıya aktarır. Böylece API'de CORS değişikliği gerekmez. Basketbol sekmesi aynı şekilde `/api/ask_stream_mai_basketball` vekilini kullanır; istek `MAI_API_BASE_URL/ask_stream_mai_basketball` adresine gider. İki vekilin ortak kodu `lib/proxy.ts` dosyasındadır; erişim kodu kontrolü de buradadır.
+Futbol sekmesinde tarayıcı, `/api/ask_stream` yolundaki Next.js vekiline istek yapar. Vekil aynı istek gövdesini `MAI_API_BASE_URL/ask_stream` adresine iletir ve cevap akışını tamponlamadan tarayıcıya aktarır. Böylece API'de CORS değişikliği gerekmez. Basketbol sekmesi aynı şekilde `/api/ask_stream_mai_basketball` vekilini kullanır; istek `MAI_API_BASE_URL/ask_stream_mai_basketball` adresine gider. Zengin akışlı (`assistant_delta`, çok satırlı metin) `/api/ask_stream_mai` vekili de durur; futbol sekmesini ona döndürmek için `components/ChatApp.tsx` içindeki `SPORTS.football.endpoint` değiştirilir. Vekillerin ortak kodu `lib/proxy.ts` dosyasındadır; erişim kodu kontrolü de buradadır.
 
 ## Dağıtım için gereken ayarlar
 
