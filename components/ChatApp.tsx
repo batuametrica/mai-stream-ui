@@ -39,8 +39,9 @@ function sportOf(chat: Conversation): Sport {
 
 function makeConversation(context: ChatContext, sport: Sport = "football"): Conversation {
   const timestamp = Date.now();
+  const id = crypto.randomUUID();
   return {
-    id: crypto.randomUUID(), sport, sessionId: timestamp * 100 + Math.floor(Math.random() * 100),
+    id, sport, sessionId: timestamp * 100 + Math.floor(Math.random() * 100), historyScope: id,
     title: "Yeni sohbet", createdAt: timestamp, updatedAt: timestamp,
     context: { ...context }, messages: [],
   };
@@ -231,6 +232,7 @@ export default function ChatApp() {
     const priorUser = [...chat.messages.slice(0, index)].reverse().find((item) => item.role === "user");
     const next = makeConversation(chat.context, sportOf(chat));
     next.title = `Devam · ${chat.title}`;
+    next.historyScope = chat.historyScope || chat.id;   // kart, kaynak sohbetin kapsamında saklı
     next.messages = [...(priorUser ? [{ ...priorUser, id: crypto.randomUUID() }] : []),
       { ...message, id: crypto.randomUUID() }];
     setConversations((previous) => [next, ...previous]);
@@ -283,6 +285,8 @@ export default function ChatApp() {
     // Basketbolda maç bağlamı, hazır kart ve kart devamı yok: yalnızca soru ve oturum gönderilir.
     const request: Record<string, unknown> = { question, user_id: userIdRef.current, session_id: chat.sessionId };
     if (chatSport === "football") {
+      // /ask_stream geçmişi kullanıcı + maça göre tutar; yeni sohbet temiz başlasın diye kullanıcı kimliği sohbete özel.
+      request.user_id = `${userIdRef.current}:${chat.historyScope || chat.id}`;
       request.match_status = chat.context.matchStatus;
       request.use_predefined = predefinedMode;
       if (chat.context.matchId) request.match_id = chat.context.matchId;

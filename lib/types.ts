@@ -25,6 +25,10 @@ export type Conversation = {
   id: string;
   sport?: Sport; // eski kayıtlarda yok: futbol
   sessionId: number;
+  // Futbol /ask_stream geçmişi session_id'yi değil kullanıcı + maçı anahtar alır (mobil sözleşmesi). Sohbetler
+  // birbirine karışmasın diye her sohbet kendi kapsamıyla gönderilir; karttan devam eden sohbet kaynağınınkini alır.
+  // Eski kayıtlarda yok: id kullanılır.
+  historyScope?: string;
   title: string;
   createdAt: number;
   updatedAt: number;
