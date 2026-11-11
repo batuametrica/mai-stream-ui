@@ -4,12 +4,10 @@ import { Check, ChevronLeft, ChevronRight, Copy, MessageSquare, RefreshCw, Rotat
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MessageMarkdown from "@/components/MessageMarkdown";
+import { HANDOFF_KEY, MOBILE_HISTORY_SCOPE, TOKEN_KEY, USER_KEY, type HandoffCard } from "@/lib/handoff";
 import { getErrorMessage, readMaiStream } from "@/lib/stream";
 import type { MaiStreamEvent, MatchesResponse, MatchStatus, MobileMatch } from "@/lib/types";
 
-// Sohbet ekranıyla aynı anahtarlar: kullanıcı kimliği ve ekip erişim kodu paylaşılır.
-const USER_KEY = "mai-stream-ui:user:v1";
-const TOKEN_KEY = "mai-stream-ui:token:v1";
 const TIME_ZONE = "Europe/Istanbul";
 
 const timeFormat = new Intl.DateTimeFormat("tr-TR", { timeZone: TIME_ZONE, hour: "2-digit", minute: "2-digit" });
@@ -31,7 +29,9 @@ type Answer = {
   loading: boolean;
   error?: boolean;
   startedAt: number;
+  finishedAt?: number;
   elapsedMs?: number;
+  questionId?: string;      // /ask_stream'in verdiği kimlik: sohbete bu karttan devam etmek için
   betPrediction?: Record<string, unknown> | null;
 };
 
@@ -192,6 +192,17 @@ export default function MobileApp() {
   const sheetAnswer = sheet ? answers[sheetKey] : undefined;
   const sheetMatch = sheet ? data?.matches.find((item) => item.id === sheet.matchId) || null : null;
 
+  // Bu maçta en son cevaplanan kart: uygulamada sohbet, kullanıcı + maç geçmişindeki bu karttan sürer.
+  const lastCard = useMemo(() => {
+    if (!match) return null;
+    let latest: { question: string; answer: Answer } | null = null;
+    for (const [key, answer] of Object.entries(answers)) {
+      if (!key.startsWith(`${match.id}|`) || !answer.questionId || answer.error || !answer.finishedAt) continue;
+      if (!latest || answer.finishedAt > (latest.answer.finishedAt || 0)) latest = { question: key.slice(match.id.length + 1), answer };
+    }
+    return latest;
+  }, [answers, match]);
+
   useEffect(() => {
     if (!sheetAnswer?.loading) return;
     const timer = window.setInterval(() => setNow(Date.now()), 100);
@@ -261,7 +272,7 @@ export default function MobileApp() {
     sessionIdsRef.current[target.id] ||= Date.now() * 100 + Math.floor(Math.random() * 100);
     const request = {
       question,
-      user_id: `${userIdRef.current}:mobil`,
+      user_id: `${userIdRef.current}:${MOBILE_HISTORY_SCOPE}`,
       session_id: sessionIdsRef.current[target.id],
       match_id: target.id,
       match_status: apiStatus(target.status),
@@ -281,8 +292,8 @@ export default function MobileApp() {
         const text = event.data?.payload?.text || "";
         if (event.type === "message") {
           receivedFinal = true;
-          update(() => ({ text, status: undefined, loading: false, elapsedMs: Date.now() - startedAt,
-            betPrediction: event.data?.payload?.bet_prediction || null }));
+          update(() => ({ text, status: undefined, loading: false, finishedAt: Date.now(), elapsedMs: Date.now() - startedAt,
+            questionId: event.data?.question_id, betPrediction: event.data?.payload?.bet_prediction || null }));
         } else if (event.type === "error") {
           receivedFinal = true;
           update(() => ({ text: text || "İstek tamamlanamadı.", status: undefined, loading: false, error: true, elapsedMs: Date.now() - startedAt }));
@@ -309,6 +320,27 @@ export default function MobileApp() {
     } finally {
       if (controllersRef.current.get(key) === controller) controllersRef.current.delete(key);
     }
+  }
+
+  // Uygulamadaki "Sohbete devam et": sohbet ekranı maç bağlamıyla açılır. Kart verilirse sohbet o kartın cevabından
+  // (question_id) sürer; sohbet aynı kullanıcı kimliğini kullandığı için API kartı Redis'ten bulur.
+  function continueToChat(target: MobileMatch, card?: { question: string; answer: Answer }) {
+    const params = new URLSearchParams({
+      match_id: target.id,
+      competition_id: target.competitionId,
+      match_status: apiStatus(target.status),
+      title: `${target.home} – ${target.away}`,
+    });
+    try {
+      sessionStorage.removeItem(HANDOFF_KEY);
+      if (card?.answer.questionId) {
+        params.set("question_id", card.answer.questionId);
+        const handoff: HandoffCard = { questionId: card.answer.questionId, question: card.question,
+          answer: card.answer.text, betPrediction: card.answer.betPrediction || null };
+        sessionStorage.setItem(HANDOFF_KEY, JSON.stringify(handoff));
+      }
+    } catch { /* depolama kapalıysa kart metni olmadan, question_id ile devam edilir */ }
+    window.location.assign(`/?${params.toString()}`);
   }
 
   async function copyAnswer() {
@@ -445,6 +477,10 @@ export default function MobileApp() {
               <p className="m-foot">Sorular <code>/predefined_questions_stream</code>, cevaplar mobil uygulamadaki gibi <code>/ask_stream</code> hazır kart isteğiyle alınır.</p>
             </>}
           </div>
+          {match && <div className="m-detail-cta">
+            <button className="m-primary" onClick={() => continueToChat(match, lastCard || undefined)}><MessageSquare size={18} />Sohbete devam et</button>
+            <span className="m-cta-hint">{lastCard ? `Son kart yanıtından devam eder: ${lastCard.question}` : "Sohbet bu maçın bağlamıyla açılır"}</span>
+          </div>}
         </section>}
 
         {sheet && <>
@@ -468,10 +504,16 @@ export default function MobileApp() {
               {sheetAnswer?.betPrediction && <details className="prediction-details"><summary>Tahmin verisi</summary><pre>{JSON.stringify(sheetAnswer.betPrediction, null, 2)}</pre></details>}
             </div>
             <footer className="m-sheet-foot">
-              {elapsed !== undefined && <span className="m-sheet-time" title="İstekten son cevaba kadar geçen süre"><Timer size={14} />{seconds(elapsed)}</span>}
-              <div className="m-sheet-actions">
-                <button className="m-ghost" onClick={() => void copyAnswer()} disabled={!sheetAnswer?.text || sheetAnswer.loading}>{copied ? <Check size={14} /> : <Copy size={14} />}{copied ? "Kopyalandı" : "Kopyala"}</button>
-                <button className="m-ghost" disabled={!sheetMatch || sheetAnswer?.loading} onClick={() => sheetMatch && void ask(sheetMatch, sheet.question, true)}><RotateCcw size={14} />Tekrar sor</button>
+              {sheetMatch && sheetAnswer?.questionId && !sheetAnswer.loading && !sheetAnswer.error
+                && <button className="m-primary" onClick={() => continueToChat(sheetMatch, { question: sheet.question, answer: sheetAnswer })}>
+                  <MessageSquare size={18} />Sohbete devam et
+                </button>}
+              <div className="m-sheet-meta">
+                {elapsed !== undefined && <span className="m-sheet-time" title="İstekten son cevaba kadar geçen süre"><Timer size={14} />{seconds(elapsed)}</span>}
+                <div className="m-sheet-actions">
+                  <button className="m-ghost" onClick={() => void copyAnswer()} disabled={!sheetAnswer?.text || sheetAnswer.loading}>{copied ? <Check size={14} /> : <Copy size={14} />}{copied ? "Kopyalandı" : "Kopyala"}</button>
+                  <button className="m-ghost" disabled={!sheetMatch || sheetAnswer?.loading} onClick={() => sheetMatch && void ask(sheetMatch, sheet.question, true)}><RotateCcw size={14} />Tekrar sor</button>
+                </div>
               </div>
             </footer>
           </section>

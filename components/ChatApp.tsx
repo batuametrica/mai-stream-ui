@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { HANDOFF_KEY, MOBILE_HISTORY_SCOPE, TOKEN_KEY, USER_KEY, type HandoffCard } from "@/lib/handoff";
 import { getErrorMessage, readMaiStream } from "@/lib/stream";
 import MessageMarkdown from "@/components/MessageMarkdown";
 import SportIcon from "@/components/SportIcon";
@@ -14,9 +15,7 @@ import type { ChatContext, ChatMessage, Conversation, MaiStreamEvent, MatchStatu
 
 const STORAGE_KEY = "mai-stream-ui:conversations:v1";
 const SELECTED_KEY = "mai-stream-ui:selected:v1";
-const USER_KEY = "mai-stream-ui:user:v1";
 const CONTEXT_KEY = "mai-stream-ui:context:v1";
-const TOKEN_KEY = "mai-stream-ui:token:v1";
 const EMPTY_CONTEXT: ChatContext = { matchId: "", competitionId: "", matchStatus: "Fixture" };
 
 // Futbol varsayılandır ve mobil uygulamaların kullandığı /ask_stream'e gider: cevap kelime kelime akmaz
@@ -46,6 +45,41 @@ function makeConversation(context: ChatContext, sport: Sport = "football"): Conv
     title: "Yeni sohbet", createdAt: timestamp, updatedAt: timestamp,
     context: { ...context }, messages: [],
   };
+}
+
+type Handoff = { chat: Conversation; context: ChatContext; questionId: string | null };
+
+// Mobil maç ekranındaki "Sohbete devam et": /?match_id=…&competition_id=…&match_status=…&title=…[&question_id=…].
+// Sohbet maç bağlamıyla ve mobil ekranla aynı geçmiş kapsamıyla açılır; adres temizlenir, yenileme yeni sohbet açmaz.
+function readHandoff(): Handoff | null {
+  const params = new URLSearchParams(window.location.search);
+  const matchId = params.get("match_id")?.trim();
+  if (!matchId) return null;
+  window.history.replaceState(null, "", window.location.pathname);
+  const status = params.get("match_status");
+  const context: ChatContext = {
+    matchId,
+    competitionId: params.get("competition_id")?.trim() || "",
+    matchStatus: status === "Playing" || status === "Played" ? status : "Fixture",
+  };
+  const chat = makeConversation(context);
+  chat.title = params.get("title")?.trim() || "Maç sohbeti";
+  chat.historyScope = MOBILE_HISTORY_SCOPE;
+  const questionId = params.get("question_id")?.trim() || null;
+  let card: HandoffCard | null = null;
+  try {
+    card = JSON.parse(sessionStorage.getItem(HANDOFF_KEY) || "null") as HandoffCard | null;
+    sessionStorage.removeItem(HANDOFF_KEY);
+  } catch { card = null; }
+  if (questionId && card?.questionId === questionId) {
+    const createdAt = Date.now();
+    chat.messages = [
+      { id: crypto.randomUUID(), role: "user", text: card.question, createdAt },
+      { id: crypto.randomUUID(), role: "assistant", text: card.answer, createdAt, predefined: true, questionId,
+        betPrediction: card.betPrediction || null },
+    ];
+  }
+  return { chat, context, questionId };
 }
 
 function groupFor(timestamp: number) {
@@ -94,19 +128,29 @@ export default function ChatApp() {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
+  // StrictMode efekti iki kez çalıştırır; mobil geçiş bir kez okunur (adres ilk okumada temizlenir).
+  const handoffRef = useRef<Handoff | null | undefined>(undefined);
 
   useEffect(() => {
     try {
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]") as Conversation[];
       const chats = Array.isArray(stored) ? stored.filter((chat) => chat?.id && Array.isArray(chat.messages)) : [];
-      setConversations(chats);
+      if (handoffRef.current === undefined) handoffRef.current = readHandoff();
+      const handoff = handoffRef.current;
+      setConversations(handoff ? [handoff.chat, ...chats] : chats);
       // Arayüz her açılışta futbolla başlar; son seçili sohbet basketbolsa o sekmeye geçildiğinde açılır.
       const storedSelected = localStorage.getItem(SELECTED_KEY);
       const storedChat = chats.find((chat) => chat.id === storedSelected);
       if (storedChat && sportOf(storedChat) === "basketball") lastSelectedRef.current.basketball = storedChat.id;
-      else setSelectedId(storedSelected);
+      if (handoff) setSelectedId(handoff.chat.id);
+      else if (!storedChat || sportOf(storedChat) !== "basketball") setSelectedId(storedSelected);
       const savedContext = JSON.parse(localStorage.getItem(CONTEXT_KEY) || "null") as ChatContext | null;
-      if (savedContext && typeof savedContext.matchId === "string") setDefaultContext(savedContext);
+      if (handoff) {
+        setDefaultContext(handoff.context);
+        setPendingContinuationId(handoff.questionId);
+        setNotice(handoff.chat.messages.length ? "Mobil maç ekranındaki kart yanıtından devam ediliyor."
+          : "Mobil maç ekranından bu maçın bağlamıyla sohbet açıldı.");
+      } else if (savedContext && typeof savedContext.matchId === "string") setDefaultContext(savedContext);
       const userId = localStorage.getItem(USER_KEY) || `mai-ui-${crypto.randomUUID()}`;
       localStorage.setItem(USER_KEY, userId);
       userIdRef.current = userId;

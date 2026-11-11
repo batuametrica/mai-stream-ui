@@ -106,7 +106,13 @@
 .m-sheet-loading { display: flex; align-items: center; gap: 12px; color: #a0a0a0; font-size: 13px; }
 .m-sheet-loading.after { margin-top: 14px; gap: 9px; font-size: 12px; }
 .m-error { color: #ffb0a9; }
-.m-sheet-foot { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 10px 14px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid #303030; }
+.m-sheet-foot { flex: 0 0 auto; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid #303030; }
+.m-sheet-meta { display: flex; align-items: center; gap: 10px; }
+.m-detail-cta { flex: 0 0 auto; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid #292929; background: #191919; }
+.m-primary { width: 100%; min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 9px; border: 0; border-radius: 14px; background: var(--accent); color: #fff; font-size: 15px; font-weight: 650; }
+.m-primary:hover { background: var(--accent-hover); }
+.m-primary:active { transform: scale(.99); }
+.m-cta-hint { display: block; margin-top: 7px; text-align: center; font-size: 11px; color: #858585; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .m-sheet-time { display: inline-flex; align-items: center; gap: 5px; color: #8d8d8d; font-size: 12px; font-variant-numeric: tabular-nums; }
 .m-sheet-actions { margin-left: auto; display: flex; gap: 8px; }
 
