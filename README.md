@@ -32,6 +32,17 @@ Arayüz `http://localhost:3000` adresindedir. `.env.example` dosyasını `.env.l
   - boş ekranda fantasy önerileri gösterir;
   - maç bağlamı, kart modu ve maç ayarları bu sekmede gizlidir.
 
+### Fransızca test (yalnızca futbol)
+
+Fransa uygulaması için futbol cevapları Fransızca da denenebilir. Arayüz Türkçe kalır; yalnızca istekler değişir.
+
+- **Sohbet:** mesaj alanındaki **TR | FR** seçicisi veya **Test ayarları → Cevap dili**. FR seçiliyken `/ask_stream` isteğine `locale: "fr"` eklenir. Üst çubukta **FR** etiketi görünür. Boş ekranda Fransızca örnek sorular çıkar.
+- Dil, sohbet bağlamının parçasıdır. Mesajı olan bir sohbette dil değişirse aynı maç bağlamıyla yeni sohbet açılır, çünkü API geçmişi ve kart önbelleği dile göre ayrı tutulur.
+- **Mobil maç ekranı:** üst çubukta aynı **TR | FR** seçicisi bulunur. FR'de hazır sorular `predefined_questions_stream` ucundan `locale: "fr"` ile Fransızca gelir. Kart cevapları da Fransızca istenir. **Sohbete devam et** adrese `locale=fr` ekler; sohbet Fransızca açılır. Bir dilde cevaplanan karttan diğer dilde sohbete devam edilmez.
+- Cevaplardaki maç saatleri Fransa saatidir (Europe/Paris). Maç listesindeki saatler Türkiye saati olarak kalır.
+- Maç önü ve maç sonu kartlarının Fransızca cevapları ilk dokunuşta üretilir ve önbelleğe alınır (`fr-card:` anahtarları). Bu yüzden ilk dokunuş Türkçeden yavaş olabilir. Canlı maç kartları her seferinde canlı üretilir.
+- TR seçiliyken istek gövdesine `locale` alanı eklenmez; mobil uygulamanın bugünkü isteğiyle aynıdır. Basketbolda dil seçimi yoktur.
+
 ### Mobil maç ekranı (`/mobil`)
 
 mAI'nin mobil uygulamadaki maç deneyimini test etmek için ayrı ekran. Sohbet ekranında sol raydaki telefon simgesi ve yan paneldeki **Mobil maç ekranı** bağlantısı buraya açılır. Masaüstünde telefon çerçevesi içinde, telefonda tam ekran görünür.

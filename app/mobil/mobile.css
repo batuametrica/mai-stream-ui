@@ -17,7 +17,12 @@
 .m-brand-mark i { position: absolute; right: 3px; top: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--glow); box-shadow: 0 0 8px var(--glow-shadow); }
 .m-brand-mark.small { width: 32px; height: 32px; flex-basis: 32px; margin-top: 2px; }
 .m-pill { font-size: 11px; font-weight: 650; letter-spacing: 0; color: var(--badge-text); border: 1px solid var(--badge-line); background: var(--badge-bg); border-radius: 100px; padding: 3px 9px; }
-.m-top-actions { margin-left: auto; display: flex; gap: 2px; }
+.m-top-actions { margin-left: auto; display: flex; align-items: center; gap: 2px; }
+/* TR | FR: globals.css'teki .lang-toggle, dokunmaya uygun boyutta. */
+.m-top .lang-toggle { margin-right: 4px; }
+.m-top .lang-toggle button { font-size: 12px; padding: 6px 10px; }
+.m-top.detail .lang-toggle { margin-left: auto; margin-right: 6px; }
+.m-lang-note { margin: 0 14px 10px; padding: 9px 12px; border: 1px solid var(--notice-line); background: var(--notice-bg); color: var(--notice-text); border-radius: 11px; font-size: 12px; line-height: 1.45; }
 .m-icon-button { width: 40px; height: 40px; flex: 0 0 40px; display: grid; place-items: center; border: 0; border-radius: 12px; padding: 0; background: transparent; color: #a8a8a8; text-decoration: none; }
 .m-icon-button:hover:not(:disabled) { background: #2a2a2a; color: #f2f2f2; }
 .m-icon-button:disabled { opacity: .5; }

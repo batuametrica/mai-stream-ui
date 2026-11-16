@@ -261,6 +261,13 @@ a.rail-button, a.new-chat-button { text-decoration: none; }
 .context-chip:hover, .mode-chip:hover { color: #eee; border-color: #666; }
 .chip-dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: var(--chip-dot); }
 .mode-chip.on { background: var(--mode-on-bg); border-color: var(--mode-on-line); color: var(--mode-on-text); }
+/* Futbol cevap dili: TR | FR. Seçili olan kart modu gibi vurgulanır. */
+.lang-toggle { display: inline-flex; flex: 0 0 auto; border: 1px solid #494949; background: #303030; border-radius: 100px; padding: 2px; }
+.lang-toggle button { border: 0; background: transparent; color: #a8a8a8; font-size: 11px; font-weight: 600; letter-spacing: .3px; padding: 4px 8px; border-radius: 100px; }
+.lang-toggle button:hover:not(.on) { color: #eee; }
+.lang-toggle button.on { background: var(--mode-on-bg); color: var(--mode-on-text); box-shadow: inset 0 0 0 1px var(--mode-on-line); }
+.locale-badge { color: var(--badge-text); border: 1px solid var(--badge-line); background: var(--badge-bg); border-radius: 100px; padding: 5px 9px; font-size: 11px; font-weight: 650; letter-spacing: .4px; }
+.empty-state code { font-size: 12px; color: var(--badge-text); background: var(--badge-bg); border-radius: 4px; padding: 1px 5px; }
 .send-button { border: 0; background: var(--accent); color: #fff; flex: 0 0 32px; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; }
 .send-button:hover:not(:disabled) { background: var(--accent-hover); }
 .send-button:disabled { background: #464646; color: #a0a0a0; }
@@ -326,7 +333,8 @@ a.rail-button, a.new-chat-button { text-decoration: none; }
   .message-row.assistant .message-text { font-size: 14px; }
   .mode-chip { font-size: 0; padding: 6px; }
   .mode-chip svg { width: 15px; height: 15px; }
-  .context-chip { max-width: 165px; }
+  .context-chip { max-width: 130px; }
+  .composer-left { gap: 6px; }
   .suggestions { flex-direction: column; align-items: stretch; }
   .empty-state { padding-bottom: 50px; }
 }

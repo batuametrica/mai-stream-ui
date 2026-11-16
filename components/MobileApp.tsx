@@ -4,9 +4,9 @@ import { Check, ChevronLeft, ChevronRight, Copy, MessageSquare, RefreshCw, Rotat
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MessageMarkdown from "@/components/MessageMarkdown";
-import { HANDOFF_KEY, MOBILE_HISTORY_SCOPE, TOKEN_KEY, USER_KEY, type HandoffCard } from "@/lib/handoff";
+import { HANDOFF_KEY, MOBILE_HISTORY_SCOPE, MOBILE_LOCALE_KEY, TOKEN_KEY, USER_KEY, type HandoffCard } from "@/lib/handoff";
 import { getErrorMessage, readMaiStream } from "@/lib/stream";
-import type { MaiStreamEvent, MatchesResponse, MatchStatus, MobileMatch } from "@/lib/types";
+import type { Locale, MaiStreamEvent, MatchesResponse, MatchStatus, MobileMatch } from "@/lib/types";
 
 const TIME_ZONE = "Europe/Istanbul";
 
@@ -33,7 +33,19 @@ type Answer = {
   elapsedMs?: number;
   questionId?: string;      // /ask_stream'in verdiği kimlik: sohbete bu karttan devam etmek için
   betPrediction?: Record<string, unknown> | null;
+  locale: Locale;           // kartın sorulduğu dil: sohbete aynı dille devam edilir
 };
+
+// Fransa uygulaması testi: FR seçiliyse hazır sorular ve kart cevapları locale: "fr" ile istenir. TR'de istek gövdesi
+// mobil uygulamanın bugünkü isteğiyle aynıdır (locale alanı gönderilmez).
+const LOCALE_OPTIONS: { key: Locale; label: string }[] = [{ key: "tr", label: "TR" }, { key: "fr", label: "FR" }];
+
+function LangToggle({ locale, onChange }: { locale: Locale; onChange: (locale: Locale) => void }) {
+  return <div className="lang-toggle" role="radiogroup" aria-label="Cevap dili">
+    {LOCALE_OPTIONS.map(({ key, label }) => <button key={key} role="radio" aria-checked={key === locale} className={key === locale ? "on" : ""}
+      title={key === "fr" ? "Fransızca sorular ve cevaplar" : "Türkçe sorular ve cevaplar"} onClick={() => onChange(key)}>{label}</button>)}
+  </div>;
+}
 
 // API'nin bildiği üç durum; ertelenen/iptal maçlar maç öncesi gibi sorulur.
 function apiStatus(status: string): MatchStatus {
@@ -85,7 +97,8 @@ export default function MobileApp() {
   const [matchesError, setMatchesError] = useState("");
   const [day, setDay] = useState<string | null>(null);
   const [matchId, setMatchId] = useState<string | null>(null);
-  const [questions, setQuestions] = useState<Partial<Record<MatchStatus, string[]>>>({});
+  const [locale, setLocale] = useState<Locale>("tr");
+  const [questions, setQuestions] = useState<Record<string, string[]>>({});   // anahtar: `${locale}:${durum}`
   const [questionsError, setQuestionsError] = useState("");
   const [answers, setAnswers] = useState<Record<string, Answer>>({});
   const [sheet, setSheet] = useState<{ matchId: string; question: string } | null>(null);
@@ -143,6 +156,7 @@ export default function MobileApp() {
       localStorage.setItem(USER_KEY, userId);
       userIdRef.current = userId;
       tokenRef.current = sessionStorage.getItem(TOKEN_KEY) || "";
+      if (localStorage.getItem(MOBILE_LOCALE_KEY) === "fr") setLocale("fr");
     } catch {
       userIdRef.current = `mai-ui-${crypto.randomUUID()}`;
     }
@@ -164,10 +178,17 @@ export default function MobileApp() {
 
   const match = useMemo(() => data?.matches.find((item) => item.id === matchId) || null, [data, matchId]);
   const matchStatus = match ? apiStatus(match.status) : null;
-  const matchQuestions = matchStatus ? questions[matchStatus] : undefined;
+  const questionsKey = matchStatus ? `${locale}:${matchStatus}` : "";
+  const matchQuestions = questionsKey ? questions[questionsKey] : undefined;
+
+  function changeLocale(next: Locale) {
+    setLocale(next);
+    setQuestionsError("");
+    try { localStorage.setItem(MOBILE_LOCALE_KEY, next); } catch { /* depolama kapalıysa yalnızca bu oturumda */ }
+  }
 
   useEffect(() => {
-    if (!match || !matchStatus || questions[matchStatus]) return;
+    if (!match || !matchStatus || questions[questionsKey]) return;
     let cancelled = false;
     setQuestionsError("");
     (async () => {
@@ -175,18 +196,18 @@ export default function MobileApp() {
         const response = await fetch("/api/predefined_questions", {
           method: "POST",
           headers: { "Content-Type": "application/json", ...(tokenRef.current ? { "x-mai-ui-token": tokenRef.current } : {}) },
-          body: JSON.stringify({ match_id: match.id, match_status: matchStatus }),
+          body: JSON.stringify({ match_id: match.id, match_status: matchStatus, ...(locale === "fr" ? { locale } : {}) }),
         });
         const text = await response.text();
         if (!response.ok) throw new Error(getErrorMessage(text));
         const body = JSON.parse(text) as { questions?: string[] };
-        if (!cancelled) setQuestions((previous) => ({ ...previous, [matchStatus]: body.questions || [] }));
+        if (!cancelled) setQuestions((previous) => ({ ...previous, [questionsKey]: body.questions || [] }));
       } catch (error) {
         if (!cancelled) setQuestionsError(error instanceof Error ? error.message : "Sorular alınamadı.");
       }
     })();
     return () => { cancelled = true; };
-  }, [match, matchStatus, questions]);
+  }, [match, matchStatus, questions, questionsKey, locale]);
 
   const sheetKey = sheet ? `${sheet.matchId}|${sheet.question}` : "";
   const sheetAnswer = sheet ? answers[sheetKey] : undefined;
@@ -198,10 +219,11 @@ export default function MobileApp() {
     let latest: { question: string; answer: Answer } | null = null;
     for (const [key, answer] of Object.entries(answers)) {
       if (!key.startsWith(`${match.id}|`) || !answer.questionId || answer.error || !answer.finishedAt) continue;
+      if (answer.locale !== locale) continue;   // TR kartından FR sohbetine (veya tersi) devam edilmez
       if (!latest || answer.finishedAt > (latest.answer.finishedAt || 0)) latest = { question: key.slice(match.id.length + 1), answer };
     }
     return latest;
-  }, [answers, match]);
+  }, [answers, match, locale]);
 
   useEffect(() => {
     if (!sheetAnswer?.loading) return;
@@ -249,7 +271,7 @@ export default function MobileApp() {
     else dismissSheet();
   }
 
-  async function ask(target: MobileMatch, question: string, force = false) {
+  async function ask(target: MobileMatch, question: string, force = false, askLocale: Locale = locale) {
     const key = `${target.id}|${question}`;
     if (!sheet) window.history.pushState({ maiSheet: true, maiMatch: target.id }, "", window.location.href);
     if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
@@ -264,7 +286,7 @@ export default function MobileApp() {
     controllersRef.current.set(key, controller);
     const startedAt = Date.now();
     setNow(startedAt);
-    setAnswers((previous) => ({ ...previous, [key]: { text: "", status: "Düşünüyor…", loading: true, startedAt } }));
+    setAnswers((previous) => ({ ...previous, [key]: { text: "", status: "Düşünüyor…", loading: true, startedAt, locale: askLocale } }));
     const update = (patch: (answer: Answer) => Partial<Answer>) => setAnswers((previous) => previous[key]
       ? { ...previous, [key]: { ...previous[key], ...patch(previous[key]) } } : previous);
 
@@ -278,6 +300,7 @@ export default function MobileApp() {
       match_status: apiStatus(target.status),
       competitions: [target.competitionId],
       use_predefined: true,
+      ...(askLocale === "fr" ? { locale: askLocale } : {}),
     };
     let receivedFinal = false;
     try {
@@ -331,6 +354,7 @@ export default function MobileApp() {
       match_status: apiStatus(target.status),
       title: `${target.home} – ${target.away}`,
     });
+    if ((card?.answer.locale ?? locale) === "fr") params.set("locale", "fr");
     try {
       sessionStorage.removeItem(HANDOFF_KEY);
       if (card?.answer.questionId) {
@@ -390,6 +414,7 @@ export default function MobileApp() {
           <header className="m-top">
             <div className="m-brand"><span className="m-brand-mark" aria-hidden="true">m<i /></span>mAI<span className="m-pill">Mobil</span></div>
             <div className="m-top-actions">
+              <LangToggle locale={locale} onChange={changeLocale} />
               <button className="m-icon-button" onClick={() => void loadMatches()} disabled={loadingMatches} title="Listeyi yenile" aria-label="Listeyi yenile">
                 <RefreshCw size={18} className={loadingMatches ? "m-spin" : ""} />
               </button>
@@ -437,6 +462,7 @@ export default function MobileApp() {
               <strong>{match?.competition || "Maç"}</strong>
               {match?.stage && <small>{match.stage}</small>}
             </div>
+            <LangToggle locale={locale} onChange={changeLocale} />
           </header>
           <div className="m-scroll">
             {!match ? <div className="m-empty">
@@ -458,6 +484,7 @@ export default function MobileApp() {
                 <h2><Sparkles size={16} /> mAI’ye sor</h2>
                 <small>{QUESTION_TITLE[matchStatus || "Fixture"]}</small>
               </div>
+              {locale === "fr" && <p className="m-lang-note">Fransızca test: sorular ve cevaplar Fransızca. Cevaplardaki maç saatleri Fransa saatidir. Maç önü ve maç sonu kartları ilk dokunuşta üretilir, sonra önbellekten gelir.</p>}
               {questionsError && <div className="m-alert" role="alert">{questionsError}<button onClick={() => { setQuestionsError(""); setQuestions((previous) => ({ ...previous })); }}>Tekrar dene</button></div>}
               {!matchQuestions && !questionsError && <div className="m-skeleton questions">{Array.from({ length: 5 }, (_, index) => <i key={index} />)}</div>}
               {matchQuestions && <div className="m-questions">
@@ -512,7 +539,7 @@ export default function MobileApp() {
                 {elapsed !== undefined && <span className="m-sheet-time" title="İstekten son cevaba kadar geçen süre"><Timer size={14} />{seconds(elapsed)}</span>}
                 <div className="m-sheet-actions">
                   <button className="m-ghost" onClick={() => void copyAnswer()} disabled={!sheetAnswer?.text || sheetAnswer.loading}>{copied ? <Check size={14} /> : <Copy size={14} />}{copied ? "Kopyalandı" : "Kopyala"}</button>
-                  <button className="m-ghost" disabled={!sheetMatch || sheetAnswer?.loading} onClick={() => sheetMatch && void ask(sheetMatch, sheet.question, true)}><RotateCcw size={14} />Tekrar sor</button>
+                  <button className="m-ghost" disabled={!sheetMatch || sheetAnswer?.loading} onClick={() => sheetMatch && void ask(sheetMatch, sheet.question, true, sheetAnswer?.locale)}><RotateCcw size={14} />Tekrar sor</button>
                 </div>
               </div>
             </footer>
