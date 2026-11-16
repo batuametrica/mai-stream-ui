@@ -1,6 +1,6 @@
 // Mobil maç ekranı → sohbet ekranı geçişi. Sohbet /?match_id=…&competition_id=…&match_status=…&title=…
 // adresiyle açılır; karttan devam ediliyorsa &question_id=… eklenir ve kartın metni sessionStorage'dan okunur.
-// Fransızca test ediliyorsa &locale=fr eklenir; sohbet de Fransızca açılır.
+// Fransızca veya Arapça test ediliyorsa &locale=fr / &locale=ar eklenir; sohbet de o dilde açılır.
 export const USER_KEY = "mai-stream-ui:user:v1";
 export const TOKEN_KEY = "mai-stream-ui:token:v1";
 export const HANDOFF_KEY = "mai-stream-ui:handoff:v1";

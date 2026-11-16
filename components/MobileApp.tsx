@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MessageMarkdown from "@/components/MessageMarkdown";
 import { HANDOFF_KEY, MOBILE_HISTORY_SCOPE, MOBILE_LOCALE_KEY, TOKEN_KEY, USER_KEY, type HandoffCard } from "@/lib/handoff";
+import { LOCALE_KEYS, LOCALES, localeField, parseLocale, textDir } from "@/lib/locale";
 import { getErrorMessage, readMaiStream } from "@/lib/stream";
 import type { Locale, MaiStreamEvent, MatchesResponse, MatchStatus, MobileMatch } from "@/lib/types";
 
@@ -36,14 +37,17 @@ type Answer = {
   locale: Locale;           // kartın sorulduğu dil: sohbete aynı dille devam edilir
 };
 
-// Fransa uygulaması testi: FR seçiliyse hazır sorular ve kart cevapları locale: "fr" ile istenir. TR'de istek gövdesi
-// mobil uygulamanın bugünkü isteğiyle aynıdır (locale alanı gönderilmez).
-const LOCALE_OPTIONS: { key: Locale; label: string }[] = [{ key: "tr", label: "TR" }, { key: "fr", label: "FR" }];
+// Fransa uygulaması testi: FR veya AR seçiliyse hazır sorular ve kart cevapları o dilde (locale ile) istenir. TR'de
+// istek gövdesi mobil uygulamanın bugünkü isteğiyle aynıdır (locale alanı gönderilmez). Arapça sağdan sola gösterilir.
+const LOCALE_NOTES: Record<Exclude<Locale, "tr">, string> = {
+  fr: "Fransızca test: sorular ve cevaplar Fransızca. Cevaplardaki maç saatleri Fransa saatidir. Maç önü ve maç sonu kartları ilk dokunuşta üretilir, sonra önbellekten gelir.",
+  ar: "Arapça test (Fransa'daki Arap kullanıcılar): sorular ve cevaplar Arapça, sağdan sola. Cevaplardaki maç saatleri Fransa saatidir. Maç önü ve maç sonu kartları ilk dokunuşta üretilir, sonra önbellekten gelir.",
+};
 
 function LangToggle({ locale, onChange }: { locale: Locale; onChange: (locale: Locale) => void }) {
   return <div className="lang-toggle" role="radiogroup" aria-label="Cevap dili">
-    {LOCALE_OPTIONS.map(({ key, label }) => <button key={key} role="radio" aria-checked={key === locale} className={key === locale ? "on" : ""}
-      title={key === "fr" ? "Fransızca sorular ve cevaplar" : "Türkçe sorular ve cevaplar"} onClick={() => onChange(key)}>{label}</button>)}
+    {LOCALE_KEYS.map((key) => <button key={key} role="radio" aria-checked={key === locale} className={key === locale ? "on" : ""}
+      title={LOCALES[key].title} onClick={() => onChange(key)}>{LOCALES[key].short}</button>)}
   </div>;
 }
 
@@ -156,7 +160,7 @@ export default function MobileApp() {
       localStorage.setItem(USER_KEY, userId);
       userIdRef.current = userId;
       tokenRef.current = sessionStorage.getItem(TOKEN_KEY) || "";
-      if (localStorage.getItem(MOBILE_LOCALE_KEY) === "fr") setLocale("fr");
+      setLocale(parseLocale(localStorage.getItem(MOBILE_LOCALE_KEY)));
     } catch {
       userIdRef.current = `mai-ui-${crypto.randomUUID()}`;
     }
@@ -196,7 +200,7 @@ export default function MobileApp() {
         const response = await fetch("/api/predefined_questions", {
           method: "POST",
           headers: { "Content-Type": "application/json", ...(tokenRef.current ? { "x-mai-ui-token": tokenRef.current } : {}) },
-          body: JSON.stringify({ match_id: match.id, match_status: matchStatus, ...(locale === "fr" ? { locale } : {}) }),
+          body: JSON.stringify({ match_id: match.id, match_status: matchStatus, ...localeField(locale) }),
         });
         const text = await response.text();
         if (!response.ok) throw new Error(getErrorMessage(text));
@@ -219,7 +223,7 @@ export default function MobileApp() {
     let latest: { question: string; answer: Answer } | null = null;
     for (const [key, answer] of Object.entries(answers)) {
       if (!key.startsWith(`${match.id}|`) || !answer.questionId || answer.error || !answer.finishedAt) continue;
-      if (answer.locale !== locale) continue;   // TR kartından FR sohbetine (veya tersi) devam edilmez
+      if (answer.locale !== locale) continue;   // bir dilin kartından başka dildeki sohbete devam edilmez
       if (!latest || answer.finishedAt > (latest.answer.finishedAt || 0)) latest = { question: key.slice(match.id.length + 1), answer };
     }
     return latest;
@@ -300,7 +304,7 @@ export default function MobileApp() {
       match_status: apiStatus(target.status),
       competitions: [target.competitionId],
       use_predefined: true,
-      ...(askLocale === "fr" ? { locale: askLocale } : {}),
+      ...localeField(askLocale),
     };
     let receivedFinal = false;
     try {
@@ -354,7 +358,8 @@ export default function MobileApp() {
       match_status: apiStatus(target.status),
       title: `${target.home} – ${target.away}`,
     });
-    if ((card?.answer.locale ?? locale) === "fr") params.set("locale", "fr");
+    const chatLocale = card?.answer.locale ?? locale;
+    if (chatLocale !== "tr") params.set("locale", chatLocale);
     try {
       sessionStorage.removeItem(HANDOFF_KEY);
       if (card?.answer.questionId) {
@@ -484,7 +489,7 @@ export default function MobileApp() {
                 <h2><Sparkles size={16} /> mAI’ye sor</h2>
                 <small>{QUESTION_TITLE[matchStatus || "Fixture"]}</small>
               </div>
-              {locale === "fr" && <p className="m-lang-note">Fransızca test: sorular ve cevaplar Fransızca. Cevaplardaki maç saatleri Fransa saatidir. Maç önü ve maç sonu kartları ilk dokunuşta üretilir, sonra önbellekten gelir.</p>}
+              {locale !== "tr" && <p className="m-lang-note">{LOCALE_NOTES[locale]}</p>}
               {questionsError && <div className="m-alert" role="alert">{questionsError}<button onClick={() => { setQuestionsError(""); setQuestions((previous) => ({ ...previous })); }}>Tekrar dene</button></div>}
               {!matchQuestions && !questionsError && <div className="m-skeleton questions">{Array.from({ length: 5 }, (_, index) => <i key={index} />)}</div>}
               {matchQuestions && <div className="m-questions">
@@ -494,7 +499,7 @@ export default function MobileApp() {
                   const state = answer?.loading ? "loading" : answer?.error ? "error" : answer ? "answered" : "";
                   return <button key={question} className={`m-question ${state}`} onClick={() => void ask(match, question)}>
                     <span className="m-question-icon" aria-hidden="true"><Sparkles size={14} /></span>
-                    <span className="m-question-text">{question}</span>
+                    <span className="m-question-text" dir={textDir(locale)}>{question}</span>
                     <span className="m-question-state" aria-label={state === "answered" ? "Cevaplandı" : undefined}>
                       {state === "loading" ? <span className="m-dot-pulse" /> : state === "answered" ? <Check size={16} /> : <ChevronRight size={16} />}
                     </span>
@@ -519,13 +524,13 @@ export default function MobileApp() {
                 <span className="m-brand-mark small" aria-hidden="true">m<i /></span>
                 <div className="m-sheet-heading">
                   {sheetMatch && <span className="m-sheet-eyebrow">{sheetMatch.home} – {sheetMatch.away}</span>}
-                  <h2 id="m-sheet-title">{sheet.question}</h2>
+                  <h2 id="m-sheet-title" dir={sheetAnswer ? textDir(sheetAnswer.locale) : undefined}>{sheet.question}</h2>
                 </div>
                 <button className="m-icon-button" onClick={closeSheet} aria-label="Kapat" autoFocus><X size={19} /></button>
               </div>
             </div>
             <div className="m-sheet-body" aria-live="polite">
-              {sheetAnswer?.text ? <div className={sheetAnswer.error ? "m-error" : ""}><MessageMarkdown text={sheetAnswer.text} /></div>
+              {sheetAnswer?.text ? <div className={sheetAnswer.error ? "m-error" : ""} dir={textDir(sheetAnswer.locale)}><MessageMarkdown text={sheetAnswer.text} /></div>
                 : <div className="m-sheet-loading"><span className="typing-dots"><i /><i /><i /></span>{sheetAnswer?.status || "Düşünüyor…"}</div>}
               {sheetAnswer?.text && sheetAnswer.loading && sheetAnswer.status && <div className="m-sheet-loading after"><span className="m-dot-pulse" />{sheetAnswer.status}</div>}
               {sheetAnswer?.betPrediction && <details className="prediction-details"><summary>Tahmin verisi</summary><pre>{JSON.stringify(sheetAnswer.betPrediction, null, 2)}</pre></details>}

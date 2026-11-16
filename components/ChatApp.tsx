@@ -11,6 +11,7 @@ import { HANDOFF_KEY, MOBILE_HISTORY_SCOPE, TOKEN_KEY, USER_KEY, type HandoffCar
 import { getErrorMessage, readMaiStream } from "@/lib/stream";
 import MessageMarkdown from "@/components/MessageMarkdown";
 import SportIcon from "@/components/SportIcon";
+import { LOCALE_KEYS, LOCALES, localeField, parseLocale, textDir } from "@/lib/locale";
 import type { ChatContext, ChatMessage, Conversation, Locale, MaiStreamEvent, MatchStatus, Sport } from "@/lib/types";
 
 const STORAGE_KEY = "mai-stream-ui:conversations:v1";
@@ -18,15 +19,10 @@ const SELECTED_KEY = "mai-stream-ui:selected:v1";
 const CONTEXT_KEY = "mai-stream-ui:context:v1";
 const EMPTY_CONTEXT: ChatContext = { matchId: "", competitionId: "", matchStatus: "Fixture", locale: "tr" };
 
-// Futbol cevap dili (Fransa uygulaması testi). Arayüz Türkçe kalır; Fransızca seçiliyse /ask_stream'e locale: "fr"
-// gider, sorular Fransızca sorulur ve cevaplar Fransızca gelir. Basketbolda dil seçimi yoktur.
-const LOCALES: Record<Locale, { label: string; short: string }> = {
-  tr: { label: "Türkçe", short: "TR" },
-  fr: { label: "Fransızca", short: "FR" },
-};
-
+// Futbol cevap dili (Fransa uygulaması testi; ayrıntı lib/locale.ts). Arayüz Türkçe kalır; Fransızca veya Arapça
+// seçiliyse /ask_stream'e locale gider, cevaplar o dilde gelir. Basketbolda dil seçimi yoktur.
 function localeOf(context: ChatContext): Locale {
-  return context.locale === "fr" ? "fr" : "tr";
+  return parseLocale(context.locale);
 }
 
 function sameContext(a: ChatContext, b: ChatContext) {
@@ -41,11 +37,35 @@ const SPORTS: Record<Sport, { label: string; description: string; endpoint: stri
   football: { label: "Futbol", description: "Maç analizi ve lig istatistikleri", endpoint: "/api/ask_stream" },
   basketball: { label: "Basketbol", description: "EuroLeague istatistikleri ve fantasy", endpoint: "/api/ask_stream_mai_basketball" },
 };
-const FRENCH_SUGGESTIONS = {
-  matchXg: "Quel joueur a le plus de xG dans ce match ?",
-  passes: "Quel joueur a réussi le plus de passes cette saison ?",
-  matchFlow: "Analyse le déroulement de ce match.",
-  topScorer: "Qui est en tête du classement des buteurs cette saison ?",
+// Türkçe dışı dillerde boş ekran: başlık, açıklama ve örnek sorular.
+const LOCALE_EMPTY_STATE: Record<Exclude<Locale, "tr">, {
+  title: string; note: string; placeholder: string; notice: string;
+  suggestions: { matchXg: string; passes: string; matchFlow: string; topScorer: string };
+}> = {
+  fr: {
+    title: "Soruyu Fransızca yazın, cevap Fransızca gelsin",
+    note: "Maç saatleri Fransa saatiyle (Europe/Paris) verilir.",
+    placeholder: "mAI’ye Fransızca sor",
+    notice: "Fransızca test için yeni sohbet açıldı. Soruyu Fransızca yazın; cevap Fransızca gelir.",
+    suggestions: {
+      matchXg: "Quel joueur a le plus de xG dans ce match ?",
+      passes: "Quel joueur a réussi le plus de passes cette saison ?",
+      matchFlow: "Analyse le déroulement de ce match.",
+      topScorer: "Qui est en tête du classement des buteurs cette saison ?",
+    },
+  },
+  ar: {
+    title: "Soruyu Arapça yazın, cevap Arapça gelsin",
+    note: "Lehçe, Latin harfli Arapça (Arabizi) veya Fransızca da yazılabilir; cevap standart Arapça ve sağdan sola gelir. Maç saatleri Fransa saatiyle (Europe/Paris) verilir.",
+    placeholder: "mAI’ye Arapça sor",
+    notice: "Arapça test için yeni sohbet açıldı. Soruyu Arapça (veya Arabizi/Fransızca) yazın; cevap Arapça gelir.",
+    suggestions: {
+      matchXg: "من اللاعب صاحب أعلى أهداف متوقعة (xG) في هذه المباراة؟",
+      passes: "من اللاعب صاحب أكبر عدد من التمريرات الناجحة هذا الموسم؟",
+      matchFlow: "حلّل مجريات هذه المباراة.",
+      topScorer: "من يتصدر قائمة الهدافين هذا الموسم؟",
+    },
+  },
 };
 const BASKETBALL_SUGGESTIONS = [
   "En çok pota altından sayı bulan takımlar kimler?",
@@ -83,7 +103,7 @@ function readHandoff(): Handoff | null {
     matchId,
     competitionId: params.get("competition_id")?.trim() || "",
     matchStatus: status === "Playing" || status === "Played" ? status : "Fixture",
-    locale: params.get("locale") === "fr" ? "fr" : "tr",
+    locale: parseLocale(params.get("locale")),
   };
   const chat = makeConversation(context);
   chat.title = params.get("title")?.trim() || "Maç sohbeti";
@@ -201,7 +221,9 @@ export default function ChatApp() {
   const activeContext = selected?.context || defaultContext;
   const isBasketball = sport === "basketball";
   const locale = localeOf(activeContext);
-  const isFrench = !isBasketball && locale === "fr";
+  // Basketbolda dil seçimi yoktur; futbolda Türkçe dışı dil seçiliyse boş ekran, rozet ve yön o dile göre.
+  const localized = isBasketball || locale === "tr" ? null : { code: locale, ...LOCALE_EMPTY_STATE[locale] };
+  const messageDir = isBasketball ? undefined : textDir(locale);
   const sortedChats = useMemo(() => conversations
     .filter((chat) => sportOf(chat) === sport)
     .filter((chat) => chat.title.toLocaleLowerCase("tr").includes(search.toLocaleLowerCase("tr")))
@@ -297,8 +319,7 @@ export default function ChatApp() {
     setDefaultContext((current) => ({ ...current, locale: next }));
     if (selected?.messages.length) {
       newChat(context);
-      setNotice(next === "fr" ? "Fransızca test için yeni sohbet açıldı. Soruyu Fransızca yazın; cevap Fransızca gelir."
-        : "Türkçeye dönüldü; yeni sohbet açıldı.");
+      setNotice(next === "tr" ? "Türkçeye dönüldü; yeni sohbet açıldı." : LOCALE_EMPTY_STATE[next].notice);
     } else if (selected) {
       setConversations((previous) => previous.map((chat) => chat.id === selected.id ? { ...chat, context } : chat));
     }
@@ -370,7 +391,7 @@ export default function ChatApp() {
       if (chat.context.matchId) request.match_id = chat.context.matchId;
       if (chat.context.competitionId) request.competitions = [chat.context.competitionId];
       if (pendingContinuationId) request.question_id = pendingContinuationId;
-      if (localeOf(chat.context) === "fr") request.locale = "fr";
+      Object.assign(request, localeField(localeOf(chat.context)));   // Türkçe'de alan eklenmez
     }
     setPredefinedMode(false);
     setPendingContinuationId(null);
@@ -499,7 +520,7 @@ export default function ChatApp() {
             <div className="conversation-title">{selected?.title || (isBasketball ? "mAI Basketbol" : "mAI")}</div>
           </div>
           <div className="topbar-right">
-            {isFrench && <span className="locale-badge" title="Cevaplar Fransızca">FR</span>}
+            {localized && <span className="locale-badge" title={`Cevaplar ${LOCALES[localized.code].label}`}>{LOCALES[localized.code].short}</span>}
             <span className="topbar-context">{contextLabel(activeContext, sport)}</span>
             <button className="icon-button share-button" onClick={() => void shareChat()} title="Sohbeti kopyala" aria-label="Sohbeti kopyala" disabled={!selected?.messages.length}>{copiedId === "share" ? <Check size={17} /> : <Copy size={17} />}</button>
             <button className="icon-button" onClick={openSettings} title="Test ayarları" aria-label="Test ayarları"><Settings2 size={18} /></button>
@@ -512,7 +533,8 @@ export default function ChatApp() {
               {message.role === "assistant" && <div className="assistant-avatar" aria-hidden="true"><span>m</span><i /></div>}
               <div className="message-content">
                 {message.role === "assistant" && <div className="assistant-label">mAI {message.predefined && <span className="card-badge">Hazır kart</span>}</div>}
-                <div className={`message-text ${message.error ? "message-error" : ""}`}>
+                <div className={`message-text ${message.error ? "message-error" : ""}`}
+                  dir={message.role === "assistant" ? messageDir : (messageDir && "auto")}>
                   {message.text ? (message.role === "assistant" ? <MessageMarkdown text={message.text} /> : message.text)
                     : (message.role === "assistant" ? <span className="typing-dots"><i /><i /><i /></span> : "")}
                   {message.status === "Yanıt yazılıyor…" && <span className="stream-cursor" />}
@@ -535,16 +557,16 @@ export default function ChatApp() {
             <div className="suggestions">
               {BASKETBALL_SUGGESTIONS.map((question) => <button key={question} onClick={() => suggest(question)}>{question}</button>)}
             </div>
-          </div> : isFrench ? <div className="empty-state">
+          </div> : localized ? <div className="empty-state">
             <div className="welcome-mark"><span>m</span><i /></div>
-            <span className="sport-eyebrow"><Languages size={13} /> Fransızca test</span>
-            <h1>Soruyu Fransızca yazın, cevap Fransızca gelsin</h1>
-            <p>İstek <code>locale: &quot;fr&quot;</code> ile gider. Maç saatleri Fransa saatiyle (Europe/Paris) verilir.</p>
-            <div className="suggestions">
-              {activeContext.matchId && <button onClick={() => suggest(FRENCH_SUGGESTIONS.matchXg)}>{FRENCH_SUGGESTIONS.matchXg}</button>}
-              <button onClick={() => suggest(FRENCH_SUGGESTIONS.passes)}>{FRENCH_SUGGESTIONS.passes}</button>
-              {activeContext.matchId ? <button onClick={() => suggest(FRENCH_SUGGESTIONS.matchFlow)}>{FRENCH_SUGGESTIONS.matchFlow}</button>
-                : <button onClick={() => suggest(FRENCH_SUGGESTIONS.topScorer)}>{FRENCH_SUGGESTIONS.topScorer}</button>}
+            <span className="sport-eyebrow"><Languages size={13} /> {LOCALES[localized.code].label} test</span>
+            <h1>{localized.title}</h1>
+            <p>İstek <code>locale: &quot;{localized.code}&quot;</code> ile gider. {localized.note}</p>
+            <div className="suggestions" dir={messageDir}>
+              {activeContext.matchId && <button onClick={() => suggest(localized.suggestions.matchXg)}>{localized.suggestions.matchXg}</button>}
+              <button onClick={() => suggest(localized.suggestions.passes)}>{localized.suggestions.passes}</button>
+              {activeContext.matchId ? <button onClick={() => suggest(localized.suggestions.matchFlow)}>{localized.suggestions.matchFlow}</button>
+                : <button onClick={() => suggest(localized.suggestions.topScorer)}>{localized.suggestions.topScorer}</button>}
             </div>
           </div> : <div className="empty-state">
             <div className="welcome-mark"><span>m</span><i /></div>
@@ -563,7 +585,7 @@ export default function ChatApp() {
           {notice && <div className="notice" role="status">{notice}<button onClick={() => setNotice("")} aria-label="Bildirimi kapat"><X size={13} /></button></div>}
           {pendingContinuationId && <div className="continuation-banner"><Sparkles size={14} /> Seçilen karttan devam edilecek <button onClick={() => setPendingContinuationId(null)} aria-label="Kart devamını iptal et"><X size={14} /></button></div>}
           <div className="composer">
-            <textarea ref={textareaRef} rows={1} value={draft} onChange={(event) => { setDraft(event.target.value); event.target.style.height = "auto"; event.target.style.height = `${Math.min(event.target.scrollHeight, 180)}px`; }} onKeyDown={handleComposerKeyDown} placeholder={isFrench ? "mAI’ye Fransızca sor" : "mAI’ye sor"} aria-label="mAI’ye sor" disabled={!ready} />
+            <textarea ref={textareaRef} rows={1} value={draft} onChange={(event) => { setDraft(event.target.value); event.target.style.height = "auto"; event.target.style.height = `${Math.min(event.target.scrollHeight, 180)}px`; }} onKeyDown={handleComposerKeyDown} placeholder={localized ? localized.placeholder : "mAI’ye sor"} aria-label="mAI’ye sor" disabled={!ready} dir={messageDir && "auto"} />
             <div className="composer-toolbar">
               {isBasketball ? <div className="composer-left">
                 <span className="context-chip static"><span className="chip-dot" />{contextLabel(activeContext, sport)}</span>
@@ -591,7 +613,7 @@ export default function ChatApp() {
             <label className="field-label">Maç UUID <span>İsteğe bağlı</span><input value={settingsDraft.matchId} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, matchId: event.target.value }))} placeholder="Örn. cjmgsnh2mcm3fvksvmlyxu3h0" spellCheck={false} /></label>
             <label className="field-label">Lig UUID <span>İsteğe bağlı</span><input value={settingsDraft.competitionId} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, competitionId: event.target.value }))} placeholder="Örn. 482ofyysbdbeoxauk19yg7tdt" spellCheck={false} /></label>
             <label className="field-label">Maç durumu<select value={settingsDraft.matchStatus} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, matchStatus: event.target.value as MatchStatus }))}><option value="Fixture">Maç öncesi</option><option value="Playing">Canlı</option><option value="Played">Maç sonrası</option></select></label>
-            <label className="field-label">Cevap dili<select value={localeOf(settingsDraft)} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, locale: event.target.value as Locale }))}><option value="tr">Türkçe</option><option value="fr">Fransızca (locale: fr)</option></select></label>
+            <label className="field-label">Cevap dili<select value={localeOf(settingsDraft)} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, locale: event.target.value as Locale }))}>{LOCALE_KEYS.map((key) => <option key={key} value={key}>{key === "tr" ? LOCALES[key].label : `${LOCALES[key].label} (locale: ${key})`}</option>)}</select></label>
             <button className="example-context" onClick={() => setSettingsDraft({ matchId: "cjmgsnh2mcm3fvksvmlyxu3h0", competitionId: "482ofyysbdbeoxauk19yg7tdt", matchStatus: "Played" })}><Sparkles size={15} /> Örnek maç: Fenerbahçe – Eyüpspor</button>
           </>}
           <div className="modal-divider" />

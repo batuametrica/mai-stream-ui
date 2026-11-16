@@ -221,6 +221,14 @@ a.rail-button, a.new-chat-button { text-decoration: none; }
 .message-markdown tbody tr:nth-child(even) { background: #202020; }
 .message-markdown tbody tr:last-child td { border-bottom: 0; }
 .message-text.message-error { color: #ffb0a9; }
+/* Arapça cevaplar (dir="rtl"): sağdan sola hizalama, liste girintisi ve alıntı çizgisi sağda. Öznitelik yalnızca
+   Arapça sohbette eklenir; Türkçe/Fransızca görünüm değişmez. */
+[dir="rtl"] { text-align: right; }
+[dir="rtl"] .message-markdown ul, [dir="rtl"] .message-markdown ol { padding-left: 0; padding-right: 24px; }
+[dir="rtl"] .message-markdown li { padding-left: 0; padding-right: 3px; }
+[dir="rtl"] .message-markdown blockquote { padding: 2px 16px 2px 0; border-left: 0; border-right: 3px solid var(--quote-line); }
+[dir="rtl"] .message-markdown th, [dir="rtl"] .message-markdown td { text-align: right; }
+.message-text[dir="rtl"], .m-sheet-body [dir="rtl"] { line-height: 1.85; }
 .message-status { display: flex; gap: 8px; align-items: center; margin-top: 13px; color: #9b9b9b; font-size: 12px; }
 .message-status.muted { color: #777; }
 .status-pulse { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--pulse); box-shadow: 0 0 0 4px var(--pulse-ring); animation: pulse 1.5s infinite; }

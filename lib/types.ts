@@ -2,8 +2,9 @@ export type MatchStatus = "Fixture" | "Playing" | "Played";
 
 export type Sport = "football" | "basketball";
 
-// Futbol cevap dili. "fr" isteğe locale: "fr" ekler; "tr" hiçbir alan eklemez (mobil uygulamanın bugünkü isteği).
-export type Locale = "tr" | "fr";
+// Futbol cevap dili. "fr" / "ar" isteğe locale ekler; "tr" hiçbir alan eklemez (mobil uygulamanın bugünkü isteği).
+// Ayrıntılar: lib/locale.ts.
+export type Locale = "tr" | "fr" | "ar";
 
 export type ChatContext = {
   matchId: string;
